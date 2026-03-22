@@ -1,17 +1,15 @@
 ## Gonzalo (Glo) Maldonado
 
-Engineering leader who stays in the code. 15+ years building platforms and scaling teams at YouTube, Yammer/Microsoft, Nextdoor, FireHydrant, and as CTO at Mocksi (a16z). Now advising founders at [SansCourier](https://sanscourier.ai).
+Most production systems break the same way. I've spent 20 years finding out which way.
 
-I build workflow orchestration systems, developer experience infrastructure, and the organizational processes that let engineering teams ship fast at scale.
+Platform engineering, distributed systems, AI infrastructure. Built and scaled systems at YouTube, Yammer, Nextdoor, FireHydrant. Co-founded Mocksi (a16z Speedrun). Now I advise technical founders through [SansCourier](https://sanscourier.ai).
 
-**Currently:** Technical advisory at SansCourier.ai | Keynote speaker at QConSF 2025
+### Recent work
 
-### What I build
-
-- **Workflow Orchestration** — Temporal-based durable execution systems ([temporal-mcp](https://github.com/brief-hq/temporal-mcp), FireHydrant, Mocksi)
-- **Platform Infrastructure** — Kubernetes, CI/CD, observability, GitOps (Nextdoor ECS→EKS, Cisco K8s+Consul)
-- **AI Products** — RAG pipelines, LLM orchestration, self-hosted inference ([paribusAI](https://github.com/elg0nz/paribusAI))
-- **Open Source** — First Terraform provider for Oracle Cloud | 3 PRs to Kubernetes core
+- Deployed Temporal for incident orchestration at FireHydrant and AI simulation pipelines at Mocksi
+- Migrated Nextdoor from ECS to EKS. Ran K8s + Consul for Cisco.
+- Built Terraform packages for Cisco, Akamai, Oracle. First Terraform provider for Oracle Cloud. Three PRs to Kubernetes core.
+- [paribusAI](https://github.com/elg0nz/paribusAI). Socratic AI mentor. RAG, local inference, vector DB.
 
 ### Writing
 
