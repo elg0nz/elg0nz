@@ -6,6 +6,7 @@ Platform engineering, distributed systems, AI infrastructure. Built and scaled s
 
 ### Recent work
 
+- [`install-glo`](https://www.npmjs.com/package/install-glo). AI-powered web vitals optimization engine. Built on the Vercel AI SDK, Anthropic, and OpenAI. `npx install-glo`
 - Deployed Temporal for incident orchestration at FireHydrant and AI simulation pipelines at Mocksi
 - Migrated Nextdoor from ECS to EKS. Ran K8s + Consul for Cisco.
 - Built Terraform packages for Cisco, Akamai, Oracle. First Terraform provider for Oracle Cloud. Three PRs to Kubernetes core.
