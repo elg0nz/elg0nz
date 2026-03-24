@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.1.0
+## 2.0.2
 
 - Refactor glo-loop monolith (675 LOC) into 6 focused modules under `lib/`
   - `vitals.mjs` — Web Vitals constants and thresholds
