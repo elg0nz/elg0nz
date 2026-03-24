@@ -10,7 +10,8 @@
     "about-glo-loop": "about.mjs"
   },
   "scripts": {
-    "postinstall": "node postinstall.mjs"
+    "postinstall": "node postinstall.mjs",
+    "test": "node --test __tests__/*.test.mjs"
   },
   "type": "module",
   "keywords": [
