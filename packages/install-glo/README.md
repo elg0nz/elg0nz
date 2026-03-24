@@ -1,56 +1,52 @@
 # install-glo
 
-**GLO Loop** — AI-powered web vitals optimization engine, built with [Vercel AI SDK](https://sdk.vercel.ai).
-
-Runs Lighthouse on your page, uses AI to read your source code + diagnostics, suggests a surgical fix, re-measures. Repeat until your target web vital hits "good."
-
-```
-  ┌─────────────────────────────────────────────────────┐
-  │             T H E   G L O   L O O P                │
-  │   Web Vitals Optimization Engine                    │
-  │                                                     │
-  │    Gather    → run Lighthouse, extract metrics      │
-  │    Leverage  → AI analyzes code + diagnostics       │
-  │    Operate   → apply fix, re-measure, repeat        │
-  │                                                     │
-  │    ↻ repeat until target met                        │
-  └─────────────────────────────────────────────────────┘
-```
-
-## Install
+An npm package that does two things:
 
 ```bash
-npm install install-glo
+npx install-glo          # → animated business card
+npx install-glo ai       # → AI-powered web vitals optimizer
 ```
 
-This automatically adds two scripts to your `package.json`:
+No install required. Just `npx`.
 
-- `npm run glo-loop` — Start the optimization loop
-- `npm run about-glo-loop` — What is the GLO Loop?
+---
 
-## Usage
+## `npx install-glo`
+
+Renders an animated ASCII neuro shader (a port of a WebGL sine-noise algorithm, in Catppuccin Mocha palette), followed by a business card for **Gonzalo "Glo" Maldonado**.
+
+## `npx install-glo ai`
+
+Starts the **GLO Loop** — an iterative web performance optimizer built on the [Vercel AI SDK](https://sdk.vercel.ai).
+
+It does this:
+
+1. **Gather** — Runs Lighthouse on your URL, extracts Core Web Vitals and diagnostics
+2. **Leverage** — Reads your source files (Next.js App Router, Pages Router, configs), sends metrics + code to Claude or GPT-4o via the Vercel AI SDK
+3. **Operate** — AI returns one surgical fix: file path, line number, before/after code, estimated improvement
+4. **Repeat** — Re-runs Lighthouse to measure the effect, loops until the target vital hits "good"
+
+### Quick start
 
 ```bash
-# Set an AI provider key
-export ANTHROPIC_API_KEY=sk-ant-...   # recommended
-# or
-export OPENAI_API_KEY=sk-...
+# 1. Set a provider key
+export ANTHROPIC_API_KEY=sk-ant-...    # or OPENAI_API_KEY=sk-...
 
-# Start your dev server, then:
-npm run glo-loop
+# 2. Start your dev server
+
+# 3. Run it
+npx install-glo ai
 ```
 
-The loop will ask for:
-1. **Page URL** (default: `http://localhost:3000`)
-2. **Target vital** — LCP, FCP, CLS, TBT, SI, or TTFB
-3. **Max loops** (default: 10)
+It will prompt for:
+- **Page URL** (default: `http://localhost:3000`)
+- **Target vital** — one of LCP, FCP, CLS, TBT, SI, or TTFB
+- **Max loops** (default: 10)
 
-Then it runs the GLO Loop: Gather metrics via Lighthouse, Leverage AI to analyze your code, Operate by suggesting a specific fix with file + line number + before/after code.
+### Supported vitals
 
-## Supported Web Vitals
-
-| Vital | Name | Good |
-|-------|------|------|
+| Vital | Full Name | "Good" Threshold |
+|-------|-----------|-------------------|
 | LCP | Largest Contentful Paint | < 2500ms |
 | FCP | First Contentful Paint | < 1800ms |
 | CLS | Cumulative Layout Shift | < 0.1 |
@@ -58,22 +54,39 @@ Then it runs the GLO Loop: Gather metrics via Lighthouse, Leverage AI to analyze
 | SI | Speed Index | < 3400ms |
 | TTFB | Time to First Byte | < 800ms |
 
-## Requirements
+### Requirements
 
-- Chrome/Chromium (Lighthouse uses it)
+- Chrome or Chromium (Lighthouse runs headless Chrome)
 - `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`
-- Dev server running on target URL
+- A running dev server at the target URL
 
-## Also: Business Card
+## `npx install-glo about`
+
+Prints a formatted explainer of what the GLO Loop is and how to use it.
+
+---
+
+## Install as a dependency
 
 ```bash
-npx install-glo
+npm install install-glo
 ```
 
-Animated ASCII neuro shader + business card for Gonzalo "Glo" Maldonado.
+The postinstall script adds two npm scripts to your project:
+
+- `npm run glo-loop` — starts the optimization loop
+- `npm run about-glo-loop` — prints the explainer
+
+## Built with
+
+- [Vercel AI SDK](https://sdk.vercel.ai) (`ai`, `@ai-sdk/anthropic`, `@ai-sdk/openai`)
+- Lighthouse (via headless Chrome)
+- chalk, boxen
 
 ## About
 
-Created by **Gonzalo "Glo" Maldonado** — CTO / VP Eng / Technical Co-Founder. 20+ years, 5 exits (Yammer → Microsoft $1.2B, Nextdoor IPO). AI Infrastructure, Distributed Systems, Engineering Leadership.
+Created by **Gonzalo "Glo" Maldonado** — CTO / VP Eng / Technical Co-Founder.
+20+ years, 5 exits (Yammer → Microsoft $1.2B, Nextdoor IPO).
+AI Infrastructure, Distributed Systems, Engineering Leadership.
 
-**Book a call:** [intro.co/GonzaloMaldonado](https://intro.co/GonzaloMaldonado)
+[intro.co/GonzaloMaldonado](https://intro.co/GonzaloMaldonado) · [sanscourier.ai](https://sanscourier.ai) · [github.com/elg0nz](https://github.com/elg0nz)
