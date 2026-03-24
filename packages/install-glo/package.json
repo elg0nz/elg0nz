@@ -1,0 +1,40 @@
+{
+  "name": "install-glo",
+  "version": "2.0.0",
+  "description": "GLO Loop — AI-powered web vitals optimization engine built with Vercel AI SDK",
+  "main": "index.mjs",
+  "bin": {
+    "install-glo": "index.mjs",
+    "glo": "index.mjs",
+    "glo-loop": "glo-loop.mjs",
+    "about-glo-loop": "about.mjs"
+  },
+  "scripts": {
+    "postinstall": "node postinstall.mjs"
+  },
+  "type": "module",
+  "keywords": [
+    "web-vitals",
+    "lighthouse",
+    "performance",
+    "optimization",
+    "ai-sdk",
+    "vercel-ai",
+    "lcp",
+    "cls",
+    "core-web-vitals",
+    "devtool",
+    "cli",
+    "gonzalo-maldonado",
+    "sanscourier"
+  ],
+  "author": "Gonzalo Maldonado <glo@sanscourier.ai>",
+  "license": "MIT",
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.63",
+    "@ai-sdk/openai": "^3.0.47",
+    "ai": "^6.0.134",
+    "boxen": "^8.0.1",
+    "chalk": "^5.4.1"
+  }
+}
