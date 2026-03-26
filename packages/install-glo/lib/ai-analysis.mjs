@@ -1,4 +1,5 @@
-import { generateText as defaultGenerateText } from "ai";
+import { streamText as defaultStreamText } from "ai";
+import chalk from "chalk";
 import { runWithCLI as defaultRunWithCLI } from "./ai-backend.mjs";
 import { VITALS } from "./vitals.mjs";
 
@@ -89,7 +90,7 @@ export async function analyzeWithAI(
   sourceFiles,
   loopNumber,
   previousSuggestions,
-  { generateText = defaultGenerateText, runWithCLI = defaultRunWithCLI } = {}
+  { streamText = defaultStreamText, runWithCLI = defaultRunWithCLI } = {}
 ) {
   const prompt = buildPrompt(
     targetVital,
@@ -104,8 +105,14 @@ export async function analyzeWithAI(
     return runWithCLI(backend.command, prompt);
   }
 
-  const result = await generateText({ model: backend.model, prompt });
-  return result.text;
+  const result = streamText({ model: backend.model, prompt });
+  let text = "";
+  for await (const chunk of result.textStream) {
+    process.stdout.write(chalk.dim(chunk));
+    text += chunk;
+  }
+  process.stdout.write("\n");
+  return text;
 }
 
 // Exported for testing

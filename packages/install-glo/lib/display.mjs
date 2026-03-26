@@ -16,61 +16,6 @@ export function formatVital(key, value) {
   );
 }
 
-export function printBanner() {
-  const lines = [
-    "",
-    chalk.hex("#FF8C00").bold(
-      "  ┌─────────────────────────────────────────────────────┐"
-    ),
-    chalk.hex("#FF8C00").bold("  │") +
-      chalk.hex("#FF8C00").bold(
-        "             T H E   G L O   L O O P                "
-      ) +
-      chalk.hex("#FF8C00").bold("│"),
-    chalk.hex("#FF8C00").bold("  │") +
-      chalk.dim(
-        "   Web Vitals Optimization Engine                    "
-      ) +
-      chalk.hex("#FF8C00").bold("│"),
-    chalk.hex("#FF8C00").bold("  │") +
-      chalk.dim(
-        "                                                     "
-      ) +
-      chalk.hex("#FF8C00").bold("│"),
-    chalk.hex("#FF8C00").bold("  │") +
-      chalk.hex("#4AF626")("    G") +
-      chalk.white("ather    → ") +
-      chalk.dim("run Lighthouse, extract metrics    ") +
-      chalk.hex("#FF8C00").bold("│"),
-    chalk.hex("#FF8C00").bold("  │") +
-      chalk.hex("#4AF626")("    L") +
-      chalk.white("everage  → ") +
-      chalk.dim("AI analyzes code + diagnostics    ") +
-      chalk.hex("#FF8C00").bold("│"),
-    chalk.hex("#FF8C00").bold("  │") +
-      chalk.hex("#4AF626")("    O") +
-      chalk.white("perate   → ") +
-      chalk.dim("apply fix, re-measure, repeat     ") +
-      chalk.hex("#FF8C00").bold("│"),
-    chalk.hex("#FF8C00").bold("  │") +
-      chalk.dim(
-        "                                                     "
-      ) +
-      chalk.hex("#FF8C00").bold("│"),
-    chalk.hex("#FF8C00").bold("  │") +
-      chalk.dim("    ↻ repeat until target met") +
-      chalk.dim(
-        "                         "
-      ) +
-      chalk.hex("#FF8C00").bold("│"),
-    chalk.hex("#FF8C00").bold(
-      "  └─────────────────────────────────────────────────────┘"
-    ),
-    "",
-  ];
-  console.log(lines.join("\n"));
-}
-
 export function printScore(score) {
   const colored =
     score >= 90

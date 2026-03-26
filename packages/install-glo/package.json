@@ -1,6 +1,6 @@
 {
   "name": "install-glo",
-  "version": "2.1.0",
+  "version": "3.0.0",
   "description": "GLO Loop — AI-powered web vitals optimization engine built with Vercel AI SDK",
   "main": "index.mjs",
   "bin": {

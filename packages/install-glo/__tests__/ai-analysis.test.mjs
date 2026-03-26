@@ -63,11 +63,15 @@ describe("buildPrompt", () => {
 });
 
 describe("analyzeWithAI", () => {
-  it("calls generateText with model and prompt (sdk backend)", async () => {
+  it("calls streamText with model and prompt (sdk backend)", async () => {
     let capturedArgs;
-    const fakeGenerateText = async (args) => {
+    const fakeStreamText = (args) => {
       capturedArgs = args;
-      return { text: "DIAGNOSIS: test response" };
+      return {
+        textStream: (async function* () {
+          yield "DIAGNOSIS: test response";
+        })(),
+      };
     };
 
     const fakeModel = { id: "fake-model" };
@@ -84,7 +88,7 @@ describe("analyzeWithAI", () => {
       [],
       1,
       [],
-      { generateText: fakeGenerateText }
+      { streamText: fakeStreamText }
     );
 
     assert.equal(result, "DIAGNOSIS: test response");
@@ -94,7 +98,7 @@ describe("analyzeWithAI", () => {
 
   it("calls runWithCLI for cli backend", async () => {
     let capturedCommand, capturedPrompt;
-    const fakeRunWithCLI = (command, prompt) => {
+    const fakeRunWithCLI = async (command, prompt) => {
       capturedCommand = command;
       capturedPrompt = prompt;
       return "DIAGNOSIS: cli response";
@@ -121,10 +125,12 @@ describe("analyzeWithAI", () => {
     assert.ok(capturedPrompt.includes("LCP"));
   });
 
-  it("propagates errors from generateText", async () => {
-    const fakeGenerateText = async () => {
-      throw new Error("API down");
-    };
+  it("propagates errors from streamText", async () => {
+    const fakeStreamText = () => ({
+      textStream: (async function* () {
+        throw new Error("API down");
+      })(),
+    });
 
     await assert.rejects(
       () =>
@@ -136,7 +142,7 @@ describe("analyzeWithAI", () => {
           [],
           1,
           [],
-          { generateText: fakeGenerateText }
+          { streamText: fakeStreamText }
         ),
       { message: "API down" }
     );

@@ -4,7 +4,7 @@ import { runLighthouse, extractMetrics, extractDiagnostics } from "./lighthouse.
 import { discoverPageFiles } from "./source-discovery.mjs";
 import { analyzeWithAI } from "./ai-analysis.mjs";
 import { parseSuggestion, applyEdit } from "./code-editor.mjs";
-import { formatVital, printScore, printSuggestion } from "./display.mjs";
+import { formatVital, printScore } from "./display.mjs";
 
 function gather(targetUrl) {
   const report = runLighthouse(targetUrl);
@@ -49,32 +49,18 @@ async function operate(rl, suggestion, projectRoot, route) {
   console.log(chalk.hex("#4AF626").bold("\n  OPERATE"));
 
   const edit = parseSuggestion(suggestion);
+  const result = applyEdit(projectRoot, edit);
 
-  const action = await rl.question(
-    chalk.hex("#FF8C00")("  Apply this fix? ") +
-      chalk.dim("[y = apply / s = skip / q = quit]: ")
-  );
-
-  const choice = action.trim().toLowerCase();
-  if (choice === "q" || choice === "quit") {
-    console.log(chalk.dim("\n  Loop ended by user.\n"));
-    return { action: "quit" };
+  if (result.ok) {
+    console.log(chalk.green(`  ✓ Code ${result.action} in ${edit.file}`));
+  } else {
+    console.log(chalk.red(`  ✗ ${result.reason}`));
+    console.log(chalk.dim("  Fix manually, then press Enter to re-measure."));
+    await rl.question(chalk.dim("  Press Enter when ready..."));
   }
 
-  if (choice === "y" || choice === "yes") {
-    const result = applyEdit(projectRoot, edit);
-    if (result.ok) {
-      console.log(chalk.green(`  ✓ Code ${result.action} in ${edit.file}`));
-    } else {
-      console.log(chalk.red(`  ✗ ${result.reason}`));
-      console.log(chalk.dim("  Apply manually, then press Enter to re-measure."));
-      await rl.question(chalk.dim("  Press Enter when ready..."));
-    }
-    const sourceFiles = discoverPageFiles(projectRoot, route);
-    return { action: "applied", summary: suggestion.split("\n")[0], sourceFiles };
-  }
-
-  return { action: "skipped", summary: suggestion.split("\n")[0] };
+  const sourceFiles = discoverPageFiles(projectRoot, route);
+  return { action: "applied", summary: suggestion.split("\n")[0], sourceFiles };
 }
 
 export async function runLoop({ rl, backend, targetUrl, route, targetVital, maxLoops }) {
@@ -136,8 +122,6 @@ export async function runLoop({ rl, backend, targetUrl, route, targetVital, maxL
       console.log(chalk.red(`  AI analysis failed: ${err.message}\n`));
       break;
     }
-
-    printSuggestion(suggestion);
 
     const result = await operate(rl, suggestion, projectRoot, route);
     if (result.action === "quit") break;

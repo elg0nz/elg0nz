@@ -4,19 +4,14 @@ import { createInterface } from "node:readline/promises";
 import chalk from "chalk";
 
 import { getModel } from "./lib/model.mjs";
-import { printBanner } from "./lib/display.mjs";
-import { collectInputs } from "./lib/inputs.mjs";
+import { animateCassette, printCassette } from "./lib/cassette.mjs";
+import { selectLoop } from "./lib/loop-selector.mjs";
+import { collectInputs, collectCliInputs } from "./lib/inputs.mjs";
 import { runLoop } from "./lib/loop-runner.mjs";
+import { runCliLoop } from "./lib/cli-loop-runner.mjs";
+import { generateGloopFile } from "./lib/gloop-generator.mjs";
 
-async function main() {
-  printBanner();
-
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-
-  const { targetUrl, route, targetVital, maxLoops, aiBackend } =
-    await collectInputs(rl);
-
-  let backend;
+function resolveBackend(rl, aiBackend) {
   if (aiBackend === "sdk") {
     const resolved = getModel();
     if (!resolved) {
@@ -35,13 +30,57 @@ async function main() {
       process.exit(1);
     }
     console.log(chalk.dim(`\n  AI: ${resolved.label} via Vercel AI SDK`));
-    backend = { type: "sdk", model: resolved.model };
+    return { type: "sdk", model: resolved.model };
+  }
+  console.log(chalk.dim(`\n  AI: ${aiBackend} (CLI)`));
+  return { type: "cli", command: aiBackend };
+}
+
+async function main() {
+  if (process.stdout.isTTY) {
+    await animateCassette();
   } else {
-    console.log(chalk.dim(`\n  AI: ${aiBackend} (CLI)`));
-    backend = { type: "cli", command: aiBackend };
+    printCassette();
   }
 
-  await runLoop({ rl, backend, targetUrl, route, targetVital, maxLoops });
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const projectRoot = process.env.INIT_CWD || process.cwd();
+
+  // Step 1: Detect GLOOP.md or let user select a loop
+  const selected = await selectLoop(rl, projectRoot);
+
+  // Step 2: Collect inputs based on loop type
+  if (selected.type === "web-vitals") {
+    const { targetUrl, route, targetVital, maxLoops, aiBackend } =
+      await collectInputs(rl);
+
+    const backend = resolveBackend(rl, aiBackend);
+    await runLoop({ rl, backend, targetUrl, route, targetVital, maxLoops });
+  } else if (selected.type === "cli-timing") {
+    const { command, metric, sourcePaths, maxLoops, aiBackend } =
+      await collectCliInputs(rl);
+
+    const backend = resolveBackend(rl, aiBackend);
+    await runCliLoop({ rl, backend, command, metric, maxLoops, sourcePaths });
+  } else if (selected.type === "generate-gloop") {
+    await generateGloopFile(rl, projectRoot);
+  } else if (selected.source === "gloop-file") {
+    // Custom GLOOP.md — route based on its type field, fallback to cli-timing
+    const cfg = selected.config;
+    const loopType = cfg.type || "cli-timing";
+
+    if (loopType === "web-vitals") {
+      const { targetUrl, route, targetVital, maxLoops, aiBackend } =
+        await collectInputs(rl);
+      const backend = resolveBackend(rl, aiBackend);
+      await runLoop({ rl, backend, targetUrl, route, targetVital, maxLoops });
+    } else {
+      const { command, metric, sourcePaths, maxLoops, aiBackend } =
+        await collectCliInputs(rl);
+      const backend = resolveBackend(rl, aiBackend);
+      await runCliLoop({ rl, backend, command, metric, maxLoops, sourcePaths });
+    }
+  }
 
   rl.close();
 }

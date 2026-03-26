@@ -22,7 +22,7 @@ export function runLighthouse(url, { execSync = defaultExecSync } = {}) {
 
   const result = execSync(cmd, {
     maxBuffer: 100 * 1024 * 1024,
-    stdio: ["pipe", "pipe", "pipe"],
+    stdio: ["pipe", "pipe", "inherit"],
   });
   return JSON.parse(result.toString());
 }

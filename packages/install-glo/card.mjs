@@ -7,18 +7,25 @@ import boxen from "boxen";
 // dithered ASCII characters in Catppuccin Mocha palette.
 
 const CHARS = " .:-=+*#%@";
-const WIDTH = 58;
-const HEIGHT = 18;
+const WIDTH = 52;
+const HEIGHT = 12;
 const FRAMES = 42;
 const FRAME_MS = 60;
 
-const catppuccin = {
+const palette = {
   base: "#1e1e2e",
   blue: "#89b4fa",
   lavender: "#b4befe",
   text: "#cdd6f4",
   orange: "#FF8C00",
+  green: "#4AF626",
 };
+
+const ob = chalk.hex(palette.orange).bold;
+const g = chalk.hex(palette.green);
+const d = chalk.dim;
+const w = chalk.white;
+const wb = chalk.white.bold;
 
 function rot2(x, y, a) {
   const c = Math.cos(a);
@@ -49,7 +56,7 @@ function neuroShape(ux, uy, t) {
   return rx + ry;
 }
 
-function renderFrame(t) {
+function renderShader(t) {
   const lines = [];
   for (let y = 0; y < HEIGHT; y++) {
     let line = "";
@@ -65,98 +72,188 @@ function renderFrame(t) {
       const idx = Math.floor(noise * (CHARS.length - 1));
       const ch = CHARS[idx];
 
-      // Color based on intensity - blend from base to blue to text
       if (noise < 0.25) {
-        line += chalk.hex(catppuccin.base)(ch);
+        line += chalk.hex(palette.base)(ch);
       } else if (noise < 0.5) {
-        line += chalk.hex(catppuccin.blue)(ch);
+        line += chalk.hex(palette.blue)(ch);
       } else if (noise < 0.75) {
-        line += chalk.hex(catppuccin.lavender)(ch);
+        line += chalk.hex(palette.lavender)(ch);
       } else {
-        line += chalk.hex(catppuccin.text)(ch);
+        line += chalk.hex(palette.text)(ch);
       }
     }
     lines.push(line);
   }
-  return lines.join("\n");
+  return lines;
 }
 
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
+// ── Cassette Shell ────────────────────────────────────────────────────
+
+const SPOKES_TOP = ["╱   ╲", "─   ─", "╲   ╱", " │ │ "];
+const SPOKES_BOT = ["╲   ╱", "─   ─", "╱   ╲", " │ │ "];
+
+const CW = 58; // cassette inner width
+
+function visLen(s) {
+  return s.replace(/\x1b\[[0-9;]*m/g, "").length;
+}
+
+function cPad(s, width) {
+  return s + " ".repeat(Math.max(0, width - visLen(s)));
+}
+
+function cRow(inner) {
+  return ob("  ║") + cPad(inner, CW) + ob("║");
+}
+
+function buildCassetteFrame(frame, shaderLines) {
+  const ri = frame % 4;
+  const lt = SPOKES_TOP[ri];
+  const lb = SPOKES_BOT[ri];
+  const rt = SPOKES_TOP[(ri + 2) % 4];
+  const rb = SPOKES_BOT[(ri + 2) % 4];
+
+  // Tape pattern scrolls
+  const tapeBase = "░▓".repeat(16);
+  const tp = g(tapeBase.slice(frame % 2, (frame % 2) + 6));
+
+  const lines = [];
+  lines.push("");
+  lines.push(ob(`  ╔${"═".repeat(CW)}╗`));
+  lines.push(cRow(""));
+  lines.push(
+    cRow(
+      d("  ┌") + d("─".repeat(52)) + d("┐  ")
+    )
+  );
+
+  // Embed shader into the label area
+  for (const sl of shaderLines) {
+    lines.push(cRow(d("  │") + sl + d("│  ")));
+  }
+
+  lines.push(
+    cRow(
+      d("  └") + d("─".repeat(52)) + d("┘  ")
+    )
+  );
+  lines.push(cRow(""));
+
+  // Reels
+  lines.push(
+    cRow(
+      d("     ╭─────╮ ") + tp + d("  SIDE A · C-∞  ") + tp + d(" ╭─────╮     ")
+    )
+  );
+  lines.push(
+    cRow(
+      d("     │") + g(lt) + d("│ ") + tp + d("                ") + tp + d(" │") + g(rt) + d("│     ")
+    )
+  );
+  lines.push(
+    cRow(
+      d("     │  ") + wb("◉") + d("  │ ") + tp + d("                ") + tp + d(" │  ") + wb("◉") + d("  │     ")
+    )
+  );
+  lines.push(
+    cRow(
+      d("     │") + g(lb) + d("│ ") + tp + d("                ") + tp + d(" │") + g(rb) + d("│     ")
+    )
+  );
+  lines.push(
+    cRow(
+      d("     ╰─────╯ ") + tp + d("                ") + tp + d(" ╰─────╯     ")
+    )
+  );
+  lines.push(cRow(""));
+  lines.push(
+    cRow(
+      "      " +
+        ob("sanscourier.ai") +
+        d("  ·  ") +
+        g("▶") +
+        d(" npx install-glo")
+    )
+  );
+  lines.push(cRow(""));
+  lines.push(ob(`  ╚${"═".repeat(CW)}╝`));
+  lines.push("");
+
+  return lines;
 }
 
 // ── Business Card ──────────────────────────────────────────────────────
 
 function buildCard() {
-  const d = {
-    name: chalk.bold.hex("#FF8C00")("   Gonzalo \"Glo\" Maldonado"),
+  const c = {
+    name: chalk.bold.hex(palette.orange)("   Gonzalo \"Glo\" Maldonado"),
     title: chalk.white("   CTO / VP Eng / Technical Co-Founder"),
     tagline: chalk.dim.italic(
       "   Ship value. Say what matters. Measure what counts."
     ),
-    divider: chalk.hex("#FF8C00")(
+    divider: chalk.hex(palette.orange)(
       "   ─────────────────────────────────────"
     ),
     exits: chalk.white("   5 exits") + chalk.dim(" including:"),
     exit1:
-      chalk.hex("#4AF626")("     Yammer → Microsoft") +
+      chalk.hex(palette.green)("     Yammer → Microsoft") +
       chalk.dim("  ($1.2B)"),
-    exit2: chalk.hex("#4AF626")("     Nextdoor → IPO"),
+    exit2: chalk.hex(palette.green)("     Nextdoor → IPO"),
     experience:
       chalk.white("   20+ years") + chalk.dim(" engineering leadership"),
     focus:
       chalk.white("   Focus: ") +
       chalk.dim("AI Infrastructure, Distributed Systems"),
     web:
-      chalk.hex("#FF8C00")("   web") +
+      chalk.hex(palette.orange)("   web") +
       chalk.dim("      → ") +
       chalk.white("sanscourier.ai"),
     book:
-      chalk.hex("#FF8C00")("   book") +
+      chalk.hex(palette.orange)("   book") +
       chalk.dim("     → ") +
       chalk.white("intro.co/GonzaloMaldonado"),
     linkedin:
-      chalk.hex("#FF8C00")("   linkedin") +
+      chalk.hex(palette.orange)("   linkedin") +
       chalk.dim(" → ") +
       chalk.white("linkedin.com/in/elg0nz"),
     github:
-      chalk.hex("#FF8C00")("   github") +
+      chalk.hex(palette.orange)("   github") +
       chalk.dim("   → ") +
       chalk.white("github.com/elg0nz"),
     email:
-      chalk.hex("#FF8C00")("   email") +
+      chalk.hex(palette.orange)("   email") +
       chalk.dim("    → ") +
       chalk.white("glo@sanscourier.ai"),
     cta:
-      chalk.bold.hex("#FF8C00")("   Ready to talk? ") +
+      chalk.bold.hex(palette.orange)("   Ready to talk? ") +
       chalk.underline.white("intro.co/GonzaloMaldonado"),
   };
 
   const card = [
     "",
-    d.name,
-    d.title,
-    d.tagline,
+    c.name,
+    c.title,
+    c.tagline,
     "",
-    d.divider,
+    c.divider,
     "",
-    d.exits,
-    d.exit1,
-    d.exit2,
-    d.experience,
-    d.focus,
+    c.exits,
+    c.exit1,
+    c.exit2,
+    c.experience,
+    c.focus,
     "",
-    d.divider,
+    c.divider,
     "",
-    d.web,
-    d.book,
-    d.linkedin,
-    d.github,
-    d.email,
+    c.web,
+    c.book,
+    c.linkedin,
+    c.github,
+    c.email,
     "",
-    d.divider,
+    c.divider,
     "",
-    d.cta,
+    c.cta,
     "",
   ].join("\n");
 
@@ -164,73 +261,66 @@ function buildCard() {
     padding: 1,
     margin: 1,
     borderStyle: "double",
-    borderColor: "#FF8C00",
+    borderColor: palette.orange,
   });
 }
 
 // ── Main ───────────────────────────────────────────────────────────────
 
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 async function main() {
   const isTTY = process.stdout.isTTY;
 
   if (isTTY) {
-    // Hide cursor during animation
-    process.stdout.write("\x1B[?25l");
+    process.stdout.write("\x1B[?25l"); // hide cursor
+    process.stdout.write("\x1B[H\x1B[2J"); // clear screen
 
-    const label = chalk.hex(catppuccin.orange)(
-      "  ╔══════════════════════════════════════════════════════════╗"
-    );
-    const labelBottom = chalk.hex(catppuccin.orange)(
-      "  ╚══════════════════════════════════════════════════════════╝"
-    );
-    const brandText = chalk.bold.hex(catppuccin.orange)(
-      "                     sanscourier.ai"
-    );
+    let totalLines = 0;
 
     for (let f = 0; f < FRAMES; f++) {
       const t = (f / FRAMES) * Math.PI * 2 * 0.8;
-      const frame = renderFrame(t);
+      const shaderLines = renderShader(t);
+      const cassetteLines = buildCassetteFrame(f, shaderLines);
 
-      // Move cursor to top-left and draw
-      process.stdout.write("\x1B[H\x1B[2J");
-      process.stdout.write("\n");
-      process.stdout.write(label + "\n");
-      process.stdout.write(frame + "\n");
-      process.stdout.write(labelBottom + "\n");
-      process.stdout.write(brandText + "\n");
+      if (f > 0) {
+        process.stdout.write(`\x1b[${totalLines}A`);
+      }
+
+      const output = cassetteLines.join("\n") + "\n";
+      process.stdout.write(output);
+      totalLines = cassetteLines.length;
 
       await sleep(FRAME_MS);
     }
 
-    // Show cursor again
-    process.stdout.write("\x1B[?25l");
-    process.stdout.write("\x1B[H\x1B[2J");
+    process.stdout.write("\x1B[H\x1B[2J"); // clear for card
   }
 
   console.log(buildCard());
   console.log(
-    chalk.dim(
+    d(
       "\n  Tip: Run " +
-        chalk.white("npx install-glo") +
+        w("npx install-glo") +
         " anytime to see this card again."
     )
   );
   console.log(
-    chalk.dim(
+    d(
       "        Run " +
-        chalk.white("npx install-glo ai") +
-        " to chat with an AI that knows Glo.\n"
+        w("npx install-glo ai") +
+        " to start the GLO Loop.\n"
     )
   );
 
-  // Restore cursor
   if (isTTY) {
-    process.stdout.write("\x1B[?25h");
+    process.stdout.write("\x1B[?25h"); // restore cursor
   }
 }
 
 main().catch(() => {
-  // Restore cursor on error
   process.stdout.write("\x1B[?25h");
   process.exit(1);
 });

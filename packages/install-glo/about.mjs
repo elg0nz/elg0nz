@@ -9,8 +9,8 @@ const w = chalk.white;
 
 console.log(`
 ${o.bold("  ┌─────────────────────────────────────────────────────┐")}
-${o.bold("  │")}${o.bold("             T H E   G L O   L O O P                ")}${o.bold("│")}
-${o.bold("  │")}${d("   Web Vitals Optimization Engine                    ")}${o.bold("│")}
+${o.bold("  │")}${o.bold("             T H E   G L O   L O O P    ")}${o.bold("│")}
+${o.bold("  │")}${d("   Web Vitals Optimization Engine            ")}${o.bold("│")}
 ${o.bold("  └─────────────────────────────────────────────────────┘")}
 
 ${w.bold("  What is it?")}
