@@ -11,30 +11,37 @@ import { runLoop } from "./lib/loop-runner.mjs";
 async function main() {
   printBanner();
 
-  const resolved = getModel();
-  if (!resolved) {
-    console.log(chalk.white("  Set an API key to power the AI analysis:\n"));
-    console.log(
-      chalk.hex("#4AF626")("    export ANTHROPIC_API_KEY=sk-ant-...") +
-        chalk.dim("  (recommended)")
-    );
-    console.log(chalk.hex("#4AF626")("    export OPENAI_API_KEY=sk-..."));
-    console.log(
-      chalk.dim("\n  Then run: ") +
-        chalk.white("npm run glo-loop") +
-        "\n"
-    );
-    process.exit(1);
-  }
-
-  const { model, label } = resolved;
   const rl = createInterface({ input: process.stdin, output: process.stdout });
 
-  console.log(chalk.dim(`  AI: ${label} via Vercel AI SDK\n`));
+  const { targetUrl, route, targetVital, maxLoops, aiBackend } =
+    await collectInputs(rl);
 
-  const { targetUrl, route, targetVital, maxLoops } = await collectInputs(rl);
+  let backend;
+  if (aiBackend === "sdk") {
+    const resolved = getModel();
+    if (!resolved) {
+      console.log(chalk.white("  Set an API key to power the AI analysis:\n"));
+      console.log(
+        chalk.hex("#4AF626")("    export ANTHROPIC_API_KEY=sk-ant-...") +
+          chalk.dim("  (recommended)")
+      );
+      console.log(chalk.hex("#4AF626")("    export OPENAI_API_KEY=sk-..."));
+      console.log(
+        chalk.dim("\n  Then run: ") +
+          chalk.white("npm run glo-loop") +
+          "\n"
+      );
+      rl.close();
+      process.exit(1);
+    }
+    console.log(chalk.dim(`\n  AI: ${resolved.label} via Vercel AI SDK`));
+    backend = { type: "sdk", model: resolved.model };
+  } else {
+    console.log(chalk.dim(`\n  AI: ${aiBackend} (CLI)`));
+    backend = { type: "cli", command: aiBackend };
+  }
 
-  await runLoop({ rl, model, targetUrl, route, targetVital, maxLoops });
+  await runLoop({ rl, backend, targetUrl, route, targetVital, maxLoops });
 
   rl.close();
 }

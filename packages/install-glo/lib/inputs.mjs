@@ -39,6 +39,12 @@ export async function collectInputs(rl) {
   );
   const maxLoops = parseInt(maxInput.trim(), 10) || 10;
 
+  const aiInput = await rl.question(
+    chalk.hex("#FF8C00")("  AI backend ") +
+      chalk.dim("(default: sdk, or a CLI command e.g. 'claude -p' / 'llm'): ")
+  );
+  const aiBackend = aiInput.trim() || "sdk";
+
   console.log("");
   console.log(
     chalk.hex("#FF8C00")("  Target: ") +
@@ -50,6 +56,10 @@ export async function collectInputs(rl) {
   console.log(
     chalk.hex("#FF8C00")("  Loops:  ") + chalk.white(`${maxLoops} max`)
   );
+  console.log(
+    chalk.hex("#FF8C00")("  AI:     ") +
+      chalk.white(aiBackend === "sdk" ? "Vercel AI SDK" : aiBackend)
+  );
 
-  return { targetUrl, route, targetVital, maxLoops };
+  return { targetUrl, route, targetVital, maxLoops, aiBackend };
 }

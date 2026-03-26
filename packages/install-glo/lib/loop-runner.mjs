@@ -77,7 +77,7 @@ async function operate(rl, suggestion, projectRoot, route) {
   return { action: "skipped", summary: suggestion.split("\n")[0] };
 }
 
-export async function runLoop({ rl, model, targetUrl, route, targetVital, maxLoops }) {
+export async function runLoop({ rl, backend, targetUrl, route, targetVital, maxLoops }) {
   const projectRoot = process.env.INIT_CWD || process.cwd();
   let sourceFiles = discoverPageFiles(projectRoot, route);
   if (sourceFiles.length > 0) {
@@ -129,7 +129,7 @@ export async function runLoop({ rl, model, targetUrl, route, targetVital, maxLoo
     let suggestion;
     try {
       suggestion = await analyzeWithAI(
-        model, targetVital, metrics, diagnostics,
+        backend, targetVital, metrics, diagnostics,
         sourceFiles, loop, previousSuggestions
       );
     } catch (err) {

@@ -63,7 +63,7 @@ describe("buildPrompt", () => {
 });
 
 describe("analyzeWithAI", () => {
-  it("calls generateText with model and prompt", async () => {
+  it("calls generateText with model and prompt (sdk backend)", async () => {
     let capturedArgs;
     const fakeGenerateText = async (args) => {
       capturedArgs = args;
@@ -77,7 +77,7 @@ describe("analyzeWithAI", () => {
     };
 
     const result = await analyzeWithAI(
-      fakeModel,
+      { type: "sdk", model: fakeModel },
       "LCP",
       metrics,
       [],
@@ -92,6 +92,35 @@ describe("analyzeWithAI", () => {
     assert.ok(capturedArgs.prompt.includes("LCP"));
   });
 
+  it("calls runWithCLI for cli backend", async () => {
+    let capturedCommand, capturedPrompt;
+    const fakeRunWithCLI = (command, prompt) => {
+      capturedCommand = command;
+      capturedPrompt = prompt;
+      return "DIAGNOSIS: cli response";
+    };
+
+    const metrics = {
+      LCP: { value: 3200, display: "3.2 s", score: 0 },
+      performanceScore: 72,
+    };
+
+    const result = await analyzeWithAI(
+      { type: "cli", command: "claude -p" },
+      "LCP",
+      metrics,
+      [],
+      [],
+      1,
+      [],
+      { runWithCLI: fakeRunWithCLI }
+    );
+
+    assert.equal(result, "DIAGNOSIS: cli response");
+    assert.equal(capturedCommand, "claude -p");
+    assert.ok(capturedPrompt.includes("LCP"));
+  });
+
   it("propagates errors from generateText", async () => {
     const fakeGenerateText = async () => {
       throw new Error("API down");
@@ -99,9 +128,16 @@ describe("analyzeWithAI", () => {
 
     await assert.rejects(
       () =>
-        analyzeWithAI({}, "LCP", { performanceScore: 0 }, [], [], 1, [], {
-          generateText: fakeGenerateText,
-        }),
+        analyzeWithAI(
+          { type: "sdk", model: {} },
+          "LCP",
+          { performanceScore: 0 },
+          [],
+          [],
+          1,
+          [],
+          { generateText: fakeGenerateText }
+        ),
       { message: "API down" }
     );
   });

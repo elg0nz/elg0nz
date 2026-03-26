@@ -1,4 +1,5 @@
 import { generateText as defaultGenerateText } from "ai";
+import { runWithCLI as defaultRunWithCLI } from "./ai-backend.mjs";
 import { VITALS } from "./vitals.mjs";
 
 function buildPrompt(targetVital, metrics, diagnostics, sourceFiles, loopNumber, previousSuggestions) {
@@ -81,14 +82,14 @@ Keep the fix SURGICAL — one change per loop. Prefer high-impact, low-risk chan
 }
 
 export async function analyzeWithAI(
-  model,
+  backend,
   targetVital,
   metrics,
   diagnostics,
   sourceFiles,
   loopNumber,
   previousSuggestions,
-  { generateText = defaultGenerateText } = {}
+  { generateText = defaultGenerateText, runWithCLI = defaultRunWithCLI } = {}
 ) {
   const prompt = buildPrompt(
     targetVital,
@@ -99,7 +100,11 @@ export async function analyzeWithAI(
     previousSuggestions
   );
 
-  const result = await generateText({ model, prompt });
+  if (backend.type === "cli") {
+    return runWithCLI(backend.command, prompt);
+  }
+
+  const result = await generateText({ model: backend.model, prompt });
   return result.text;
 }
 
