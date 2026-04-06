@@ -1,149 +1,153 @@
-import chalk from "chalk";
+import React, { useState } from "react";
+import { Box, Text } from "ink";
+import TextInput from "ink-text-input";
 import { VITALS } from "./vitals.mjs";
 
-function printClaudeTip(aiBackend) {
-  if (aiBackend !== "sdk" && /\bclaude\b/i.test(aiBackend)) {
-    console.log("");
-    console.log(
-      chalk.hex("#FF8C00")("  Tip: ") +
-        chalk.dim("For fully autonomous edits (risky), use:")
-    );
-    console.log(
-      chalk.hex("#4AF626")("    claude --dangerously-skip-permissions -p")
+const h = React.createElement;
+
+const STEPS = [
+  { key: "targetUrl", label: "Page URL", defaultVal: "http://localhost:3000" },
+  { key: "targetVital", label: "Target vital", defaultVal: "LCP" },
+  { key: "maxLoops", label: "Max loops", defaultVal: "10" },
+  {
+    key: "aiBackend",
+    label: "AI backend",
+    defaultVal: "Vercel AI",
+    hint: "(default: Vercel AI, or CLI e.g. 'claude -p')",
+  },
+];
+
+export function InputForm({ onComplete }) {
+  const [step, setStep] = useState(0);
+  const [input, setInput] = useState("");
+  const [answers, setAnswers] = useState({});
+  const [error, setError] = useState(null);
+
+  const handleSubmit = (value) => {
+    const val = value.trim();
+    const newAnswers = { ...answers };
+
+    if (step === 0) {
+      newAnswers.targetUrl = val || "http://localhost:3000";
+    } else if (step === 1) {
+      const vital = (val || "LCP").toUpperCase();
+      if (!VITALS[vital]) {
+        setError(`Unknown vital: ${vital}. Choose from: ${Object.keys(VITALS).join(", ")}`);
+        setInput("");
+        return;
+      }
+      newAnswers.targetVital = vital;
+    } else if (step === 2) {
+      newAnswers.maxLoops = parseInt(val, 10) || 10;
+    } else if (step === 3) {
+      const raw = val.toLowerCase();
+      newAnswers.aiBackend =
+        !raw || raw === "vercel ai" || raw === "vercel" ? "sdk" : value.trim();
+    }
+
+    setAnswers(newAnswers);
+    setInput("");
+    setError(null);
+
+    if (step < STEPS.length - 1) {
+      setStep(step + 1);
+    } else {
+      let route = "/";
+      try {
+        route = new URL(newAnswers.targetUrl).pathname;
+      } catch {}
+      onComplete({ ...newAnswers, route });
+    }
+  };
+
+  const elems = [];
+
+  // Show vitals list before the vital step
+  if (step >= 1) {
+    elems.push(h(Text, { key: "vitals-header", color: "white" }, "  Available web vitals:"));
+    for (const [key, info] of Object.entries(VITALS)) {
+      elems.push(
+        h(
+          Text,
+          { key: `vital-${key}` },
+          h(Text, { color: "#4AF626" }, `    ${key.padEnd(6)}`),
+          h(Text, { dimColor: true }, `${info.name} (good: <${info.good}${info.unit})`)
+        )
+      );
+    }
+    elems.push(h(Text, { key: "vitals-spacer" }, ""));
+  }
+
+  // Previous answers
+  for (let i = 0; i < step; i++) {
+    const s = STEPS[i];
+    const val =
+      s.key === "maxLoops"
+        ? String(answers[s.key])
+        : s.key === "aiBackend"
+          ? answers[s.key] === "sdk"
+            ? "Vercel AI SDK"
+            : answers[s.key]
+          : answers[s.key];
+    elems.push(
+      h(
+        Text,
+        { key: `answer-${i}` },
+        h(Text, { color: "#FF8C00" }, `  ${s.label}: `),
+        h(Text, { color: "white" }, val)
+      )
     );
   }
-}
 
-export async function collectCliInputs(rl) {
-  const cmdInput = await rl.question(
-    chalk.hex("#FF8C00")("  Command to optimize ") +
-      chalk.dim("(e.g. npm test, pytest, make build): ")
-  );
-  const command = cmdInput.trim();
-  if (!command) {
-    console.log(chalk.red("\n  A command is required.\n"));
-    rl.close();
-    process.exit(1);
+  // Error
+  if (error) {
+    elems.push(h(Text, { key: "error", color: "red" }, `  ${error}`));
   }
 
-  console.log("");
-  console.log(
-    chalk.dim(
-      "  Running test suites is a great use case! The loop will measure\n" +
-        "  execution time and suggest optimizations to speed things up."
+  // Current prompt
+  const current = STEPS[step];
+  elems.push(
+    h(
+      Box,
+      { key: "prompt" },
+      h(Text, { color: "#FF8C00" }, `  ${current.label} `),
+      h(Text, { dimColor: true }, `(default: ${current.defaultVal}): `),
+      h(TextInput, { value: input, onChange: setInput, onSubmit: handleSubmit })
     )
   );
-  console.log("");
 
-  const metricInput = await rl.question(
-    chalk.hex("#FF8C00")("  Metric to optimize ") +
-      chalk.dim("(default: execution_time): ")
-  );
-  const metric = metricInput.trim() || "execution_time";
-
-  const srcInput = await rl.question(
-    chalk.hex("#FF8C00")("  Source paths ") +
-      chalk.dim("(comma-separated dirs/files, default: src,lib,test): ")
-  );
-  const sourcePaths = srcInput.trim()
-    ? srcInput.split(",").map((s) => s.trim())
-    : ["src", "lib", "test"];
-
-  const maxInput = await rl.question(
-    chalk.hex("#FF8C00")("  Max loops ") + chalk.dim("(default: 10): ")
-  );
-  const maxLoops = parseInt(maxInput.trim(), 10) || 10;
-
-  const aiInput = await rl.question(
-    chalk.hex("#FF8C00")("  AI backend ") +
-      chalk.dim("(default: Vercel AI, or a CLI command e.g. 'claude -p' / 'llm'): ")
-  );
-  const rawAi = aiInput.trim().toLowerCase();
-  const aiBackend = (!rawAi || rawAi === "vercel ai" || rawAi === "vercel") ? "sdk" : aiInput.trim();
-
-  console.log("");
-  console.log(
-    chalk.hex("#FF8C00")("  Command: ") + chalk.white(command)
-  );
-  console.log(
-    chalk.hex("#FF8C00")("  Metric:  ") + chalk.white(metric)
-  );
-  console.log(
-    chalk.hex("#FF8C00")("  Sources: ") + chalk.white(sourcePaths.join(", "))
-  );
-  console.log(
-    chalk.hex("#FF8C00")("  Loops:   ") + chalk.white(`${maxLoops} max`)
-  );
-  console.log(
-    chalk.hex("#FF8C00")("  AI:      ") +
-      chalk.white(aiBackend === "sdk" ? "Vercel AI SDK" : aiBackend)
-  );
-  printClaudeTip(aiBackend);
-
-  return { command, metric, sourcePaths, maxLoops, aiBackend };
+  return h(Box, { flexDirection: "column" }, ...elems);
 }
 
-export async function collectInputs(rl) {
-  const url = await rl.question(
-    chalk.hex("#FF8C00")("  Page URL ") +
-      chalk.dim("(default: http://localhost:3000): ")
+export function ConfigSummary({ config }) {
+  const { targetUrl, targetVital, maxLoops, aiBackend } = config;
+  const vitalInfo = VITALS[targetVital];
+  return h(
+    Box,
+    { flexDirection: "column" },
+    h(
+      Text,
+      null,
+      h(Text, { color: "#FF8C00" }, "  Target: "),
+      h(
+        Text,
+        { color: "white" },
+        `${targetVital} < ${vitalInfo.good}${vitalInfo.unit}`
+      ),
+      h(Text, { dimColor: true }, ` on ${targetUrl}`)
+    ),
+    h(
+      Text,
+      null,
+      h(Text, { color: "#FF8C00" }, "  Loops:  "),
+      h(Text, { color: "white" }, `${maxLoops} max`)
+    ),
+    h(
+      Text,
+      null,
+      h(Text, { color: "#FF8C00" }, "  AI:     "),
+      h(Text, { color: "white" }, aiBackend === "sdk" ? "Vercel AI SDK" : aiBackend)
+    )
   );
-  const targetUrl = url.trim() || "http://localhost:3000";
-
-  let route = "/";
-  try {
-    route = new URL(targetUrl).pathname;
-  } catch {}
-
-  console.log("");
-  console.log(chalk.white("  Available web vitals:"));
-  for (const [key, info] of Object.entries(VITALS)) {
-    console.log(
-      chalk.hex("#4AF626")(`    ${key.padEnd(6)}`) +
-        chalk.dim(`${info.name} (good: <${info.good}${info.unit})`)
-    );
-  }
-  console.log("");
-
-  const vitalInput = await rl.question(
-    chalk.hex("#FF8C00")("  Target vital ") + chalk.dim("(default: LCP): ")
-  );
-  const targetVital = vitalInput.trim().toUpperCase() || "LCP";
-  if (!VITALS[targetVital]) {
-    console.log(chalk.red(`\n  Unknown vital: ${targetVital}`));
-    console.log(chalk.dim(`  Choose from: ${Object.keys(VITALS).join(", ")}\n`));
-    rl.close();
-    process.exit(1);
-  }
-
-  const maxInput = await rl.question(
-    chalk.hex("#FF8C00")("  Max loops ") + chalk.dim("(default: 10): ")
-  );
-  const maxLoops = parseInt(maxInput.trim(), 10) || 10;
-
-  const aiInput = await rl.question(
-    chalk.hex("#FF8C00")("  AI backend ") +
-      chalk.dim("(default: Vercel AI, or a CLI command e.g. 'claude -p' / 'llm'): ")
-  );
-  const rawAi = aiInput.trim().toLowerCase();
-  const aiBackend = (!rawAi || rawAi === "vercel ai" || rawAi === "vercel") ? "sdk" : aiInput.trim();
-
-  console.log("");
-  console.log(
-    chalk.hex("#FF8C00")("  Target: ") +
-      chalk.white(
-        `${targetVital} < ${VITALS[targetVital].good}${VITALS[targetVital].unit}`
-      ) +
-      chalk.dim(` on ${targetUrl}`)
-  );
-  console.log(
-    chalk.hex("#FF8C00")("  Loops:  ") + chalk.white(`${maxLoops} max`)
-  );
-  console.log(
-    chalk.hex("#FF8C00")("  AI:     ") +
-      chalk.white(aiBackend === "sdk" ? "Vercel AI SDK" : aiBackend)
-  );
-  printClaudeTip(aiBackend);
-
-  return { targetUrl, route, targetVital, maxLoops, aiBackend };
 }
+

@@ -1,11 +1,9 @@
-import chalk from "chalk";
-import boxen from "boxen";
+import React, { useState, useEffect } from "react";
+import { render, Box, Text, useApp } from "ink";
+
+const h = React.createElement;
 
 // ── Neuro Shader (ASCII port) ──────────────────────────────────────────
-// Simplified port of the SansCourier WebGL neuro noise shader.
-// Uses the same rotate-and-accumulate-sine algorithm, rendered as
-// dithered ASCII characters in Catppuccin Mocha palette.
-
 const CHARS = " .:-=+*#%@";
 const WIDTH = 52;
 const HEIGHT = 12;
@@ -21,12 +19,6 @@ const palette = {
   green: "#4AF626",
 };
 
-const ob = chalk.hex(palette.orange).bold;
-const g = chalk.hex(palette.green);
-const d = chalk.dim;
-const w = chalk.white;
-const wb = chalk.white.bold;
-
 function rot2(x, y, a) {
   const c = Math.cos(a);
   const s = Math.sin(a);
@@ -34,14 +26,9 @@ function rot2(x, y, a) {
 }
 
 function neuroShape(ux, uy, t) {
-  let sax = 0,
-    say = 0;
-  let rx = 0,
-    ry = 0;
+  let sax = 0, say = 0, rx = 0, ry = 0;
   let scale = 8.0;
-  let uvx = ux,
-    uvy = uy;
-
+  let uvx = ux, uvy = uy;
   for (let j = 0; j < 8; j++) {
     [uvx, uvy] = rot2(uvx, uvy, 1.0);
     [sax, say] = rot2(sax, say, 1.0);
@@ -56,271 +43,256 @@ function neuroShape(ux, uy, t) {
   return rx + ry;
 }
 
-function renderShader(t) {
-  const lines = [];
-  for (let y = 0; y < HEIGHT; y++) {
-    let line = "";
-    for (let x = 0; x < WIDTH; x++) {
-      const ux = ((x / WIDTH - 0.5) * 2.0 * WIDTH) / HEIGHT;
-      const uy = (y / HEIGHT - 0.5) * 2.0;
-
-      let noise = neuroShape(ux * 0.7, uy * 0.7, t);
-      noise = 1.1 * Math.pow(noise, 2.0);
-      noise = Math.pow(noise, 1.2);
-      noise = Math.min(1.0, noise);
-
-      const idx = Math.floor(noise * (CHARS.length - 1));
-      const ch = CHARS[idx];
-
-      if (noise < 0.25) {
-        line += chalk.hex(palette.base)(ch);
-      } else if (noise < 0.5) {
-        line += chalk.hex(palette.blue)(ch);
-      } else if (noise < 0.75) {
-        line += chalk.hex(palette.lavender)(ch);
-      } else {
-        line += chalk.hex(palette.text)(ch);
-      }
+function computeShaderLine(y, t) {
+  const segments = [];
+  let currentColor = null;
+  let currentChars = "";
+  for (let x = 0; x < WIDTH; x++) {
+    const ux = ((x / WIDTH - 0.5) * 2.0 * WIDTH) / HEIGHT;
+    const uy = (y / HEIGHT - 0.5) * 2.0;
+    let noise = neuroShape(ux * 0.7, uy * 0.7, t);
+    noise = 1.1 * Math.pow(noise, 2.0);
+    noise = Math.pow(noise, 1.2);
+    noise = Math.min(1.0, noise);
+    const idx = Math.floor(noise * (CHARS.length - 1));
+    const ch = CHARS[idx];
+    const color =
+      noise < 0.25 ? palette.base
+      : noise < 0.5 ? palette.blue
+      : noise < 0.75 ? palette.lavender
+      : palette.text;
+    if (color !== currentColor) {
+      if (currentChars) segments.push({ color: currentColor, text: currentChars });
+      currentColor = color;
+      currentChars = ch;
+    } else {
+      currentChars += ch;
     }
-    lines.push(line);
   }
-  return lines;
+  if (currentChars) segments.push({ color: currentColor, text: currentChars });
+  return segments;
 }
 
-// ── Cassette Shell ────────────────────────────────────────────────────
+// ── Cassette Shell ──────────────────────────────────────────────────
 
-const SPOKES_TOP = ["╱   ╲", "─   ─", "╲   ╱", " │ │ "];
-const SPOKES_BOT = ["╲   ╱", "─   ─", "╱   ╲", " │ │ "];
+const SPOKES_TOP = ["\u256f   \u2572", "\u2500   \u2500", "\u2572   \u256f", " \u2502 \u2502 "];
+const SPOKES_BOT = ["\u2572   \u256f", "\u2500   \u2500", "\u256f   \u2572", " \u2502 \u2502 "];
 
-const CW = 58; // cassette inner width
-
-function visLen(s) {
-  return s.replace(/\x1b\[[0-9;]*m/g, "").length;
+function tapeSlice(frame) {
+  const base = "\u2591\u2593".repeat(16);
+  return base.slice(frame % 2, (frame % 2) + 6);
 }
 
-function cPad(s, width) {
-  return s + " ".repeat(Math.max(0, width - visLen(s)));
+function ShaderLine({ segments }) {
+  return h(
+    Text,
+    null,
+    ...segments.map((s, i) => h(Text, { key: i, color: s.color }, s.text))
+  );
 }
 
-function cRow(inner) {
-  return ob("  ║") + cPad(inner, CW) + ob("║");
-}
-
-function buildCassetteFrame(frame, shaderLines) {
+function CassetteFrame({ frame, shaderLines }) {
   const ri = frame % 4;
   const lt = SPOKES_TOP[ri];
   const lb = SPOKES_BOT[ri];
   const rt = SPOKES_TOP[(ri + 2) % 4];
   const rb = SPOKES_BOT[(ri + 2) % 4];
+  const tp = tapeSlice(frame);
 
-  // Tape pattern scrolls
-  const tapeBase = "░▓".repeat(16);
-  const tp = g(tapeBase.slice(frame % 2, (frame % 2) + 6));
+  const o = { color: palette.orange, bold: true };
+  const d = { dimColor: true };
+  const CW = 58;
 
-  const lines = [];
-  lines.push("");
-  lines.push(ob(`  ╔${"═".repeat(CW)}╗`));
-  lines.push(cRow(""));
-  lines.push(
-    cRow(
-      d("  ┌") + d("─".repeat(52)) + d("┐  ")
-    )
-  );
-
-  // Embed shader into the label area
-  for (const sl of shaderLines) {
-    lines.push(cRow(d("  │") + sl + d("│  ")));
+  function CRow({ children }) {
+    return h(
+      Text,
+      null,
+      h(Text, o, "  \u2551"),
+      children,
+      h(Text, o, "\u2551")
+    );
   }
 
-  lines.push(
-    cRow(
-      d("  └") + d("─".repeat(52)) + d("┘  ")
-    )
+  return h(
+    Box,
+    { flexDirection: "column" },
+    h(Text, null, ""),
+    h(Text, o, `  \u2554${"═".repeat(CW)}\u2557`),
+    h(CRow, null, h(Text, null, " ".repeat(CW))),
+    h(CRow, null,
+      h(Text, d, "  \u250c"), h(Text, d, "\u2500".repeat(52)), h(Text, d, "\u2510  ")
+    ),
+    ...shaderLines.map((segs, i) =>
+      h(CRow, { key: `s${i}` },
+        h(Text, d, "  \u2502"),
+        h(ShaderLine, { segments: segs }),
+        h(Text, d, "\u2502  ")
+      )
+    ),
+    h(CRow, null,
+      h(Text, d, "  \u2514"), h(Text, d, "\u2500".repeat(52)), h(Text, d, "\u2518  ")
+    ),
+    h(CRow, null, h(Text, null, " ".repeat(CW))),
+    h(CRow, null,
+      h(Text, d, "     \u256d\u2500\u2500\u2500\u2500\u2500\u256e "),
+      h(Text, { color: palette.green }, tp),
+      h(Text, d, "  SIDE A \u00b7 C-\u221e  "),
+      h(Text, { color: palette.green }, tp),
+      h(Text, d, " \u256d\u2500\u2500\u2500\u2500\u2500\u256e     ")
+    ),
+    h(CRow, null,
+      h(Text, d, "     \u2502"),
+      h(Text, { color: palette.green }, lt),
+      h(Text, d, "\u2502 "),
+      h(Text, { color: palette.green }, tp),
+      h(Text, d, "                "),
+      h(Text, { color: palette.green }, tp),
+      h(Text, d, " \u2502"),
+      h(Text, { color: palette.green }, rt),
+      h(Text, d, "\u2502     ")
+    ),
+    h(CRow, null,
+      h(Text, d, "     \u2502  "),
+      h(Text, { color: "white", bold: true }, "\u25c9"),
+      h(Text, d, "  \u2502 "),
+      h(Text, { color: palette.green }, tp),
+      h(Text, d, "                "),
+      h(Text, { color: palette.green }, tp),
+      h(Text, d, " \u2502  "),
+      h(Text, { color: "white", bold: true }, "\u25c9"),
+      h(Text, d, "  \u2502     ")
+    ),
+    h(CRow, null,
+      h(Text, d, "     \u2502"),
+      h(Text, { color: palette.green }, lb),
+      h(Text, d, "\u2502 "),
+      h(Text, { color: palette.green }, tp),
+      h(Text, d, "                "),
+      h(Text, { color: palette.green }, tp),
+      h(Text, d, " \u2502"),
+      h(Text, { color: palette.green }, rb),
+      h(Text, d, "\u2502     ")
+    ),
+    h(CRow, null,
+      h(Text, d, "     \u2570\u2500\u2500\u2500\u2500\u2500\u256f "),
+      h(Text, { color: palette.green }, tp),
+      h(Text, d, "                "),
+      h(Text, { color: palette.green }, tp),
+      h(Text, d, " \u2570\u2500\u2500\u2500\u2500\u2500\u256f     ")
+    ),
+    h(CRow, null, h(Text, null, " ".repeat(CW))),
+    h(CRow, null,
+      h(Text, null, "      "),
+      h(Text, o, "sanscourier.ai"),
+      h(Text, d, "  \u00b7  "),
+      h(Text, { color: palette.green }, "\u25b6"),
+      h(Text, d, " npx install-glo"),
+      h(Text, null, " ".repeat(CW - 46))
+    ),
+    h(CRow, null, h(Text, null, " ".repeat(CW))),
+    h(Text, o, `  \u255a${"═".repeat(CW)}\u255d`),
+    h(Text, null, "")
   );
-  lines.push(cRow(""));
-
-  // Reels
-  lines.push(
-    cRow(
-      d("     ╭─────╮ ") + tp + d("  SIDE A · C-∞  ") + tp + d(" ╭─────╮     ")
-    )
-  );
-  lines.push(
-    cRow(
-      d("     │") + g(lt) + d("│ ") + tp + d("                ") + tp + d(" │") + g(rt) + d("│     ")
-    )
-  );
-  lines.push(
-    cRow(
-      d("     │  ") + wb("◉") + d("  │ ") + tp + d("                ") + tp + d(" │  ") + wb("◉") + d("  │     ")
-    )
-  );
-  lines.push(
-    cRow(
-      d("     │") + g(lb) + d("│ ") + tp + d("                ") + tp + d(" │") + g(rb) + d("│     ")
-    )
-  );
-  lines.push(
-    cRow(
-      d("     ╰─────╯ ") + tp + d("                ") + tp + d(" ╰─────╯     ")
-    )
-  );
-  lines.push(cRow(""));
-  lines.push(
-    cRow(
-      "      " +
-        ob("sanscourier.ai") +
-        d("  ·  ") +
-        g("▶") +
-        d(" npx install-glo")
-    )
-  );
-  lines.push(cRow(""));
-  lines.push(ob(`  ╚${"═".repeat(CW)}╝`));
-  lines.push("");
-
-  return lines;
 }
 
 // ── Business Card ──────────────────────────────────────────────────────
 
-function buildCard() {
-  const c = {
-    name: chalk.bold.hex(palette.orange)("   Gonzalo \"Glo\" Maldonado"),
-    title: chalk.white("   CTO / VP Eng / Technical Co-Founder"),
-    tagline: chalk.dim.italic(
-      "   Ship value. Say what matters. Measure what counts."
-    ),
-    divider: chalk.hex(palette.orange)(
-      "   ─────────────────────────────────────"
-    ),
-    exits: chalk.white("   5 exits") + chalk.dim(" including:"),
-    exit1:
-      chalk.hex(palette.green)("     Yammer → Microsoft") +
-      chalk.dim("  ($1.2B)"),
-    exit2: chalk.hex(palette.green)("     Nextdoor → IPO"),
-    experience:
-      chalk.white("   20+ years") + chalk.dim(" engineering leadership"),
-    focus:
-      chalk.white("   Focus: ") +
-      chalk.dim("AI Infrastructure, Distributed Systems"),
-    web:
-      chalk.hex(palette.orange)("   web") +
-      chalk.dim("      → ") +
-      chalk.white("sanscourier.ai"),
-    book:
-      chalk.hex(palette.orange)("   book") +
-      chalk.dim("     → ") +
-      chalk.white("intro.co/GonzaloMaldonado"),
-    linkedin:
-      chalk.hex(palette.orange)("   linkedin") +
-      chalk.dim(" → ") +
-      chalk.white("linkedin.com/in/elg0nz"),
-    github:
-      chalk.hex(palette.orange)("   github") +
-      chalk.dim("   → ") +
-      chalk.white("github.com/elg0nz"),
-    email:
-      chalk.hex(palette.orange)("   email") +
-      chalk.dim("    → ") +
-      chalk.white("glo@sanscourier.ai"),
-    cta:
-      chalk.bold.hex(palette.orange)("   Ready to talk? ") +
-      chalk.underline.white("intro.co/GonzaloMaldonado"),
-  };
+function BusinessCard() {
+  const o = { color: palette.orange };
+  const ob = { color: palette.orange, bold: true };
+  const g = { color: palette.green };
+  const d = { dimColor: true };
+  const w = { color: "white" };
 
-  const card = [
-    "",
-    c.name,
-    c.title,
-    c.tagline,
-    "",
-    c.divider,
-    "",
-    c.exits,
-    c.exit1,
-    c.exit2,
-    c.experience,
-    c.focus,
-    "",
-    c.divider,
-    "",
-    c.web,
-    c.book,
-    c.linkedin,
-    c.github,
-    c.email,
-    "",
-    c.divider,
-    "",
-    c.cta,
-    "",
-  ].join("\n");
+  return h(
+    Box,
+    { borderStyle: "double", borderColor: palette.orange, paddingX: 2, paddingY: 1, marginX: 1, marginY: 1, flexDirection: "column" },
+    h(Text, null, ""),
+    h(Text, ob, "   Gonzalo \"Glo\" Maldonado"),
+    h(Text, w, "   CTO / VP Eng / Technical Co-Founder"),
+    h(Text, { dimColor: true, italic: true }, "   Ship value. Say what matters. Measure what counts."),
+    h(Text, null, ""),
+    h(Text, o, "   \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"),
+    h(Text, null, ""),
+    h(Text, null, h(Text, w, "   5 exits"), h(Text, d, " including:")),
+    h(Text, null, h(Text, g, "     Yammer \u2192 Microsoft"), h(Text, d, "  ($1.2B)")),
+    h(Text, g, "     Nextdoor \u2192 IPO"),
+    h(Text, null, h(Text, w, "   20+ years"), h(Text, d, " engineering leadership")),
+    h(Text, null, h(Text, w, "   Focus: "), h(Text, d, "AI Infrastructure, Distributed Systems")),
+    h(Text, null, ""),
+    h(Text, o, "   \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"),
+    h(Text, null, ""),
+    h(Text, null, h(Text, o, "   web"), h(Text, d, "      \u2192 "), h(Text, w, "sanscourier.ai")),
+    h(Text, null, h(Text, o, "   book"), h(Text, d, "     \u2192 "), h(Text, w, "intro.co/GonzaloMaldonado")),
+    h(Text, null, h(Text, o, "   linkedin"), h(Text, d, " \u2192 "), h(Text, w, "linkedin.com/in/elg0nz")),
+    h(Text, null, h(Text, o, "   github"), h(Text, d, "   \u2192 "), h(Text, w, "github.com/elg0nz")),
+    h(Text, null, h(Text, o, "   email"), h(Text, d, "    \u2192 "), h(Text, w, "glo@sanscourier.ai")),
+    h(Text, null, ""),
+    h(Text, o, "   \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"),
+    h(Text, null, ""),
+    h(Text, null, h(Text, ob, "   Ready to talk? "), h(Text, { color: "white", underline: true }, "intro.co/GonzaloMaldonado")),
+    h(Text, null, "")
+  );
+}
 
-  return boxen(card, {
-    padding: 1,
-    margin: 1,
-    borderStyle: "double",
-    borderColor: palette.orange,
-  });
+// ── CardApp ────────────────────────────────────────────────────────────
+
+function CardApp() {
+  const { exit } = useApp();
+  const isTTY = process.stdout.isTTY;
+  const [frame, setFrame] = useState(0);
+  const [showCard, setShowCard] = useState(!isTTY);
+
+  useEffect(() => {
+    if (!isTTY) {
+      // Non-TTY: show card immediately, then exit
+      const t = setTimeout(() => exit(), 100);
+      return () => clearTimeout(t);
+    }
+
+    if (frame >= FRAMES) {
+      setShowCard(true);
+      const t = setTimeout(() => exit(), 200);
+      return () => clearTimeout(t);
+    }
+
+    const timer = setTimeout(() => setFrame((f) => f + 1), FRAME_MS);
+    return () => clearTimeout(timer);
+  }, [frame, isTTY]);
+
+  if (showCard) {
+    return h(
+      Box,
+      { flexDirection: "column" },
+      h(BusinessCard),
+      h(
+        Text,
+        { dimColor: true },
+        "\n  Tip: Run ",
+        h(Text, { color: "white" }, "npx install-glo"),
+        " anytime to see this card again."
+      ),
+      h(
+        Text,
+        { dimColor: true },
+        "        Run ",
+        h(Text, { color: "white" }, "npx install-glo ai"),
+        " to start the GLO Loop.\n"
+      )
+    );
+  }
+
+  // Animate cassette
+  const t = (frame / FRAMES) * Math.PI * 2 * 0.8;
+  const shaderLines = [];
+  for (let y = 0; y < HEIGHT; y++) {
+    shaderLines.push(computeShaderLine(y, t));
+  }
+
+  return h(CassetteFrame, { frame, shaderLines });
 }
 
 // ── Main ───────────────────────────────────────────────────────────────
 
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-async function main() {
-  const isTTY = process.stdout.isTTY;
-
-  if (isTTY) {
-    process.stdout.write("\x1B[?25l"); // hide cursor
-    process.stdout.write("\x1B[H\x1B[2J"); // clear screen
-
-    let totalLines = 0;
-
-    for (let f = 0; f < FRAMES; f++) {
-      const t = (f / FRAMES) * Math.PI * 2 * 0.8;
-      const shaderLines = renderShader(t);
-      const cassetteLines = buildCassetteFrame(f, shaderLines);
-
-      if (f > 0) {
-        process.stdout.write(`\x1b[${totalLines}A`);
-      }
-
-      const output = cassetteLines.join("\n") + "\n";
-      process.stdout.write(output);
-      totalLines = cassetteLines.length;
-
-      await sleep(FRAME_MS);
-    }
-
-    process.stdout.write("\x1B[H\x1B[2J"); // clear for card
-  }
-
-  console.log(buildCard());
-  console.log(
-    d(
-      "\n  Tip: Run " +
-        w("npx install-glo") +
-        " anytime to see this card again."
-    )
-  );
-  console.log(
-    d(
-      "        Run " +
-        w("npx install-glo ai") +
-        " to start the GLO Loop.\n"
-    )
-  );
-
-  if (isTTY) {
-    process.stdout.write("\x1B[?25h"); // restore cursor
-  }
-}
-
-main().catch(() => {
-  process.stdout.write("\x1B[?25h");
-  process.exit(1);
-});
+const app = render(h(CardApp));
+app.waitUntilExit().catch(() => process.exit(1));
