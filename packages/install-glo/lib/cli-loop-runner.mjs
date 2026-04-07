@@ -1,20 +1,22 @@
-import chalk from "chalk";
+import React, { useState, useEffect } from "react";
+import { Box, Text, useInput, useApp } from "ink";
+import Spinner from "ink-spinner";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { runTimed, extractTimingMetrics } from "./cli-timing.mjs";
 import { analyzeCliWithAI } from "./cli-ai-analysis.mjs";
 import { parseSuggestion, applyEdit } from "./code-editor.mjs";
 
+const h = React.createElement;
+
 const MAX_FILE_SIZE = 15_000;
 
 function discoverSourceFiles(projectRoot, patterns) {
   const files = [];
   const seen = new Set();
-
   for (const pattern of patterns) {
     const fullPath = join(projectRoot, pattern);
     if (!existsSync(fullPath)) continue;
-
     const stat = statSync(fullPath);
     if (stat.isFile()) {
       addFile(projectRoot, fullPath, files, seen);
@@ -22,7 +24,6 @@ function discoverSourceFiles(projectRoot, patterns) {
       scanDir(projectRoot, fullPath, files, seen, 2);
     }
   }
-
   return files;
 }
 
@@ -68,104 +69,236 @@ function formatTiming(ms) {
   return `${mins}m ${secs}s`;
 }
 
-export async function runCliLoop({ rl, backend, command, metric, maxLoops, sourcePaths }) {
-  const projectRoot = process.env.INIT_CWD || process.cwd();
-  let sourceFiles = discoverSourceFiles(projectRoot, sourcePaths);
+// States: gathering → gathered → leveraging → operating → next-loop → done
 
-  if (sourceFiles.length > 0) {
-    console.log(
-      chalk.hex("#FF8C00")("  Files:  ") +
-        chalk.dim(sourceFiles.map((f) => f.path).join(", "))
-    );
+export function CliLoopRunner({ backend, command, metric, maxLoops, sourcePaths }) {
+  const { exit } = useApp();
+  const [phase, setPhase] = useState("gathering");
+  const [loop, setLoop] = useState(1);
+  const [metrics, setMetrics] = useState(null);
+  const [timedResult, setTimedResult] = useState(null);
+  const [suggestion, setSuggestion] = useState(null);
+  const [editResult, setEditResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [bestTime, setBestTime] = useState(Infinity);
+  const [improved, setImproved] = useState(false);
+  const [streamText, setStreamText] = useState("");
+  const [previousSuggestions] = useState([]);
+  const [sourceFiles, setSourceFiles] = useState(() => {
+    const projectRoot = process.env.INIT_CWD || process.cwd();
+    return discoverSourceFiles(projectRoot, sourcePaths);
+  });
+
+  // Gather phase
+  useEffect(() => {
+    if (phase !== "gathering") return;
+    let cancelled = false;
+    setStreamText("");
+
+    runTimed(command, {
+      onChunk: (chunk) => {
+        if (!cancelled) setStreamText((t) => t + chunk);
+      },
+    }).then((result) => {
+      if (cancelled) return;
+      const m = extractTimingMetrics(result, metric);
+      const timeVal = m.execution_time.value;
+      const isImproved = timeVal < bestTime;
+      if (isImproved) setBestTime(timeVal);
+      setImproved(isImproved);
+      setTimedResult(result);
+      setMetrics(m);
+      setPhase("leveraging");
+    });
+
+    return () => { cancelled = true; };
+  }, [phase, loop]);
+
+  // Leverage phase
+  useEffect(() => {
+    if (phase !== "leveraging") return;
+    let cancelled = false;
+    setStreamText("");
+
+    analyzeCliWithAI(
+      backend, command, metrics, sourceFiles,
+      loop, previousSuggestions, metric,
+      {
+        onChunk: (chunk) => {
+          if (!cancelled) setStreamText((t) => t + chunk);
+        },
+      }
+    )
+      .then((s) => {
+        if (cancelled) return;
+        setSuggestion(s);
+        // Auto-apply edit
+        const projectRoot = process.env.INIT_CWD || process.cwd();
+        const edit = parseSuggestion(s);
+        const result = applyEdit(projectRoot, edit);
+        setEditResult(result);
+        setPhase("operating");
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(`AI analysis failed: ${err.message}`);
+        setPhase("done");
+      });
+
+    return () => { cancelled = true; };
+  }, [phase]);
+
+  // Operate input (y/s/q)
+  useInput((input) => {
+    if (phase !== "operating") return;
+    if (input === "y" || input === "s") {
+      const projectRoot = process.env.INIT_CWD || process.cwd();
+      if (input === "y") {
+        previousSuggestions.push(suggestion.split("\n")[0]);
+      } else {
+        previousSuggestions.push(`SKIPPED: ${suggestion.split("\n")[0]}`);
+      }
+      setSourceFiles(discoverSourceFiles(projectRoot, sourcePaths));
+      advanceLoop();
+    } else if (input === "q") {
+      exit();
+    }
+  });
+
+  function advanceLoop() {
+    if (loop >= maxLoops) {
+      setPhase("done");
+    } else {
+      setMetrics(null);
+      setTimedResult(null);
+      setSuggestion(null);
+      setEditResult(null);
+      setLoop((l) => l + 1);
+      setPhase("gathering");
+    }
   }
 
-  const previousSuggestions = [];
-  let bestTime = Infinity;
+  // Render
+  const elems = [];
 
-  for (let loop = 1; loop <= maxLoops; loop++) {
-    console.log(
-      chalk.hex("#FF8C00")(
-        `\n  ── Loop ${loop}/${maxLoops} ${"─".repeat(42)}`
+  elems.push(
+    h(Text, { key: "header", color: "#FF8C00" },
+      `\n  \u2500\u2500 Loop ${loop}/${maxLoops} ${"\u2500".repeat(42)}`)
+  );
+
+  // Gathering
+  if (phase === "gathering") {
+    elems.push(h(Text, { key: "g-label", color: "#4AF626", bold: true }, "\n  GATHER"));
+    elems.push(
+      h(Text, { key: "g-spinner" },
+        h(Text, { dimColor: true }, "  "),
+        h(Spinner, { type: "dots" }),
+        h(Text, { dimColor: true }, ` Running: ${command}`)
       )
     );
-
-    // GATHER
-    console.log(chalk.hex("#4AF626").bold("\n  GATHER"));
-    console.log(chalk.dim(`  Running: ${command}\n`));
-
-    const timedResult = await runTimed(command);
-    const metrics = extractTimingMetrics(timedResult, metric);
-
-    const timeVal = metrics.execution_time.value;
-    const improved = timeVal < bestTime;
-    if (timeVal < bestTime) bestTime = timeVal;
-
-    const timeColor = improved ? chalk.green : chalk.yellow;
-    console.log(
-      chalk.white("    Time    ") +
-        timeColor.bold(formatTiming(timeVal)) +
-        (loop > 1 && improved
-          ? chalk.green(` ↓ improved`)
-          : "")
-    );
-    console.log(
-      chalk.white("    Exit    ") +
-        (timedResult.exitCode === 0
-          ? chalk.green("0 ✓")
-          : chalk.red(`${timedResult.exitCode} ✗`))
-    );
-
-    if (timedResult.exitCode !== 0) {
-      console.log(chalk.dim("\n  Command output (last 500 chars):"));
-      console.log(chalk.dim("  " + timedResult.output.slice(-500).replace(/\n/g, "\n  ")));
-    }
-
-    // LEVERAGE
-    console.log(chalk.hex("#4AF626").bold("\n  LEVERAGE"));
-    console.log(chalk.dim("  Analyzing with AI...\n"));
-
-    let suggestion;
-    try {
-      suggestion = await analyzeCliWithAI(
-        backend, command, metrics, sourceFiles,
-        loop, previousSuggestions, metric
-      );
-    } catch (err) {
-      console.log(chalk.red(`  AI analysis failed: ${err.message}\n`));
-      break;
-    }
-
-    // OPERATE
-    console.log(chalk.hex("#4AF626").bold("\n  OPERATE"));
-
-    const edit = parseSuggestion(suggestion);
-    const editResult = applyEdit(projectRoot, edit);
-
-    if (editResult.ok) {
-      console.log(chalk.green(`  ✓ Code ${editResult.action} in ${edit.file}`));
-    } else {
-      console.log(chalk.red(`  ✗ ${editResult.reason}`));
-      console.log(chalk.dim("  Fix manually, then press Enter to re-measure."));
-      await rl.question(chalk.dim("  Press Enter when ready..."));
-    }
-
-    previousSuggestions.push(suggestion.split("\n")[0]);
-    sourceFiles = discoverSourceFiles(projectRoot, sourcePaths);
-
-    if (loop === maxLoops) {
-      console.log(chalk.hex("#FF8C00")(`\n  Reached max loops (${maxLoops}).`));
-      console.log(
-        chalk.dim(
-          "  Best time achieved: " + chalk.white(formatTiming(bestTime))
-        )
-      );
-      console.log(
-        chalk.dim(
-          "\n  For deeper optimization: " +
-            chalk.white.underline("intro.co/GonzaloMaldonado") +
-            "\n"
-        )
-      );
+    if (streamText) {
+      elems.push(h(Text, { key: "g-output", dimColor: true }, `    ${streamText.slice(-200)}`));
     }
   }
+
+  // Metrics
+  if (metrics) {
+    elems.push(h(Text, { key: "g-done", color: "#4AF626", bold: true }, "\n  GATHER"));
+    const timeVal = metrics.execution_time.value;
+    const timeColor = improved ? "green" : "yellow";
+    elems.push(
+      h(Text, { key: "time" },
+        h(Text, { color: "white" }, "    Time    "),
+        h(Text, { color: timeColor, bold: true }, formatTiming(timeVal)),
+        loop > 1 && improved ? h(Text, { color: "green" }, " \u2193 improved") : null
+      )
+    );
+    elems.push(
+      h(Text, { key: "exit" },
+        h(Text, { color: "white" }, "    Exit    "),
+        timedResult.exitCode === 0
+          ? h(Text, { color: "green" }, "0 \u2713")
+          : h(Text, { color: "red" }, `${timedResult.exitCode} \u2717`)
+      )
+    );
+    if (timedResult.exitCode !== 0) {
+      elems.push(h(Text, { key: "stderr", dimColor: true }, "\n  Command output (last 500 chars):"));
+      elems.push(h(Text, { key: "stderr-out", dimColor: true }, "  " + timedResult.output.slice(-500)));
+    }
+  }
+
+  // Leveraging
+  if (phase === "leveraging") {
+    elems.push(h(Text, { key: "l-label", color: "#4AF626", bold: true }, "\n  LEVERAGE"));
+    elems.push(
+      h(Text, { key: "l-spinner" },
+        h(Text, { dimColor: true }, "  "),
+        h(Spinner, { type: "dots" }),
+        h(Text, { dimColor: true }, " Analyzing with AI...")
+      )
+    );
+    if (streamText) {
+      elems.push(h(Text, { key: "l-stream", dimColor: true }, `    ${streamText.slice(-300)}`));
+    }
+  }
+
+  // Operating
+  if (phase === "operating" && suggestion) {
+    elems.push(h(Text, { key: "l-done", color: "#4AF626", bold: true }, "\n  LEVERAGE"));
+    // Show suggestion lines
+    for (const [i, line] of suggestion.split("\n").entries()) {
+      if (line.startsWith("DIAGNOSIS:") || line.startsWith("FILE:") || line.startsWith("LINE:") || line.startsWith("WHY:")) {
+        const [label, ...rest] = line.split(":");
+        elems.push(
+          h(Text, { key: `sug-${i}` },
+            h(Text, { color: "#FF8C00" }, `    ${label}:`),
+            h(Text, { color: "white" }, rest.join(":"))
+          )
+        );
+      } else if (line.startsWith("BEFORE:") || line.startsWith("AFTER:")) {
+        elems.push(h(Text, { key: `sug-${i}`, color: "#FF8C00" }, `    ${line}`));
+      } else {
+        elems.push(h(Text, { key: `sug-${i}`, color: "#89b4fa" }, `    ${line}`));
+      }
+    }
+
+    elems.push(h(Text, { key: "o-label", color: "#4AF626", bold: true }, "\n  OPERATE"));
+    if (editResult) {
+      elems.push(
+        editResult.ok
+          ? h(Text, { key: "edit-ok", color: "green" }, `  \u2713 Code ${editResult.action} in ${parseSuggestion(suggestion).file}`)
+          : h(Text, { key: "edit-fail", color: "red" }, `  \u2717 ${editResult.reason}`)
+      );
+    }
+    elems.push(
+      h(Text, { key: "o-prompt", dimColor: true }, "  Continue? [y]es / [s]kip / [q]uit")
+    );
+  }
+
+  // Error
+  if (error) {
+    elems.push(h(Text, { key: "error", color: "red" }, `\n  ${error}`));
+  }
+
+  // Done
+  if (phase === "done" && !error) {
+    elems.push(
+      h(Text, { key: "max-loops", color: "#FF8C00" }, `\n  Reached max loops (${maxLoops}).`)
+    );
+    elems.push(
+      h(Text, { key: "best", dimColor: true },
+        "  Best time achieved: ",
+        h(Text, { color: "white" }, formatTiming(bestTime))
+      )
+    );
+    elems.push(
+      h(Text, { key: "cta", dimColor: true },
+        "\n  For deeper optimization: ",
+        h(Text, { color: "white", underline: true }, "intro.co/GonzaloMaldonado"),
+        "\n"
+      )
+    );
+  }
+
+  return h(Box, { flexDirection: "column" }, ...elems);
 }

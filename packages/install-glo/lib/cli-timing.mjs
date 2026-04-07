@@ -1,11 +1,10 @@
 import { spawn as defaultSpawn } from "node:child_process";
-import chalk from "chalk";
 
 /**
  * Run a command and measure its execution time.
- * Streams stdout/stderr to the terminal so the user sees progress.
+ * If onChunk is provided, streams output to the callback.
  */
-export function runTimed(command, { spawn = defaultSpawn } = {}) {
+export function runTimed(command, { spawn = defaultSpawn, onChunk } = {}) {
   return new Promise((resolve) => {
     const start = Date.now();
     const proc = spawn("sh", ["-c", command], {
@@ -17,18 +16,17 @@ export function runTimed(command, { spawn = defaultSpawn } = {}) {
     proc.stdout.on("data", (data) => {
       const str = data.toString();
       output += str;
-      process.stdout.write(chalk.dim("    " + str.replace(/\n/g, "\n    ")));
+      if (onChunk) onChunk(str);
     });
 
     proc.stderr.on("data", (data) => {
       const str = data.toString();
       output += str;
-      process.stderr.write(chalk.dim("    " + str.replace(/\n/g, "\n    ")));
+      if (onChunk) onChunk(str);
     });
 
     proc.on("close", (code) => {
       const realMs = Date.now() - start;
-      process.stdout.write("\n");
       resolve({ realMs, output: output.trim(), exitCode: code || 0 });
     });
   });

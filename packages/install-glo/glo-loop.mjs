@@ -2,18 +2,16 @@
 
 import React, { useState } from "react";
 import { render, Box, Text, useApp } from "ink";
-import { createInterface } from "node:readline/promises";
-import chalk from "chalk";
 
 import { getModel } from "./lib/model.mjs";
-import { animateCassette, printCassette } from "./lib/cassette.mjs";
-import { selectLoop } from "./lib/loop-selector.mjs";
-import { collectCliInputs } from "./lib/inputs-cli.mjs";
+import { CassetteAnimation, CassetteStatic } from "./lib/cassette.mjs";
+import { LoopSelector } from "./lib/loop-selector.mjs";
 import { InputForm, ConfigSummary } from "./lib/inputs.mjs";
+import { CliInputForm, CliConfigSummary } from "./lib/inputs-cli.mjs";
 import { Banner } from "./lib/display.mjs";
 import { LoopRunner } from "./lib/loop-runner.mjs";
-import { runCliLoop } from "./lib/cli-loop-runner.mjs";
-import { generateGloopFile } from "./lib/gloop-generator.mjs";
+import { CliLoopRunner } from "./lib/cli-loop-runner.mjs";
+import { GloopGenerator } from "./lib/gloop-generator.mjs";
 
 const h = React.createElement;
 
@@ -26,15 +24,45 @@ function resolveBackend(aiBackend) {
   return { type: "cli", command: aiBackend, label: `${aiBackend} (CLI)` };
 }
 
-// ── Ink App for web-vitals path ─────────────────────────────────────
+// Phases: cassette → select → input → running → no-key → gloop-gen
 
 function GloApp() {
   const { exit } = useApp();
-  const [phase, setPhase] = useState("input"); // input → running → no-key
+  const isTTY = process.stdout.isTTY;
+  const projectRoot = process.env.INIT_CWD || process.cwd();
+
+  const [phase, setPhase] = useState(isTTY ? "cassette" : "select");
+  const [loopType, setLoopType] = useState(null); // web-vitals | cli-timing | generate-gloop
+  const [selected, setSelected] = useState(null);
   const [config, setConfig] = useState(null);
   const [backend, setBackend] = useState(null);
 
-  const handleInputComplete = (inputs) => {
+  // Cassette animation done
+  const handleCassetteComplete = () => setPhase("select");
+
+  // Loop selected
+  const handleLoopSelect = (sel) => {
+    setSelected(sel);
+    const type = sel.type;
+
+    if (type === "generate-gloop") {
+      setLoopType("generate-gloop");
+      setPhase("gloop-gen");
+      return;
+    }
+
+    // Determine effective type for gloop-file
+    const effectiveType =
+      sel.source === "gloop-file"
+        ? (sel.config.type || "cli-timing")
+        : type;
+
+    setLoopType(effectiveType);
+    setPhase("input");
+  };
+
+  // Web-vitals input complete
+  const handleWebVitalsInput = (inputs) => {
     const resolved = resolveBackend(inputs.aiBackend);
     if (!resolved) {
       setPhase("no-key");
@@ -45,16 +73,60 @@ function GloApp() {
     setPhase("running");
   };
 
+  // CLI timing input complete
+  const handleCliInput = (inputs) => {
+    const resolved = resolveBackend(inputs.aiBackend);
+    if (!resolved) {
+      setPhase("no-key");
+      return;
+    }
+    setBackend(resolved);
+    setConfig(inputs);
+    setPhase("running");
+  };
+
+  // ── Cassette ──
+  if (phase === "cassette") {
+    return h(CassetteAnimation, { onComplete: handleCassetteComplete });
+  }
+
+  // ── Static cassette + loop selector ──
+  if (phase === "select") {
+    return h(
+      Box,
+      { flexDirection: "column" },
+      !isTTY ? h(CassetteStatic) : null,
+      h(LoopSelector, { projectRoot, onSelect: handleLoopSelect })
+    );
+  }
+
+  // ── GLOOP.md generator ──
+  if (phase === "gloop-gen") {
+    return h(GloopGenerator, { projectRoot, onComplete: () => exit() });
+  }
+
+  // ── Input phase ──
   if (phase === "input") {
+    if (loopType === "web-vitals") {
+      return h(
+        Box,
+        { flexDirection: "column" },
+        h(Banner),
+        h(Text, null, ""),
+        h(InputForm, { onComplete: handleWebVitalsInput })
+      );
+    }
+    // cli-timing
     return h(
       Box,
       { flexDirection: "column" },
       h(Banner),
       h(Text, null, ""),
-      h(InputForm, { onComplete: handleInputComplete })
+      h(CliInputForm, { onComplete: handleCliInput })
     );
   }
 
+  // ── No API key ──
   if (phase === "no-key") {
     return h(
       Box,
@@ -77,18 +149,35 @@ function GloApp() {
     );
   }
 
+  // ── Running ──
   if (phase === "running") {
+    if (loopType === "web-vitals") {
+      return h(
+        Box,
+        { flexDirection: "column" },
+        h(ConfigSummary, { config }),
+        h(Text, { dimColor: true }, `\n  AI: ${backend.label}`),
+        h(LoopRunner, {
+          backend,
+          targetUrl: config.targetUrl,
+          route: config.route,
+          targetVital: config.targetVital,
+          maxLoops: config.maxLoops,
+        })
+      );
+    }
+    // cli-timing
     return h(
       Box,
       { flexDirection: "column" },
-      h(ConfigSummary, { config }),
+      h(CliConfigSummary, { config }),
       h(Text, { dimColor: true }, `\n  AI: ${backend.label}`),
-      h(LoopRunner, {
+      h(CliLoopRunner, {
         backend,
-        targetUrl: config.targetUrl,
-        route: config.route,
-        targetVital: config.targetVital,
+        command: config.command,
+        metric: config.metric,
         maxLoops: config.maxLoops,
+        sourcePaths: config.sourcePaths,
       })
     );
   }
@@ -96,73 +185,8 @@ function GloApp() {
   return null;
 }
 
-// ── Main ───────────────────────────────────────────────────────────────
-
-function resolveBackendLegacy(rl, aiBackend) {
-  if (aiBackend === "sdk") {
-    const resolved = getModel();
-    if (!resolved) {
-      console.log(chalk.white("  Set an API key to power the AI analysis:\n"));
-      console.log(
-        chalk.hex("#4AF626")("    export ANTHROPIC_API_KEY=sk-ant-...") +
-          chalk.dim("  (recommended)")
-      );
-      console.log(chalk.hex("#4AF626")("    export OPENAI_API_KEY=sk-..."));
-      console.log(
-        chalk.dim("\n  Then run: ") +
-          chalk.white("npm run glo-loop") +
-          "\n"
-      );
-      rl.close();
-      process.exit(1);
-    }
-    console.log(chalk.dim(`\n  AI: ${resolved.label} via Vercel AI SDK`));
-    return { type: "sdk", model: resolved.model };
-  }
-  console.log(chalk.dim(`\n  AI: ${aiBackend} (CLI)`));
-  return { type: "cli", command: aiBackend };
-}
-
-async function main() {
-  // Step 1: Cassette animation (pre-Ink)
-  if (process.stdout.isTTY) {
-    await animateCassette();
-  } else {
-    printCassette();
-  }
-
-  // Step 2: Loop selection (pre-Ink, uses readline)
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const projectRoot = process.env.INIT_CWD || process.cwd();
-  const selected = await selectLoop(rl, projectRoot);
-  rl.close();
-
-  // Step 3: Route based on selection
-  const isWebVitals =
-    selected.type === "web-vitals" ||
-    (selected.source === "gloop-file" &&
-      (selected.config.type || "cli-timing") === "web-vitals");
-
-  if (isWebVitals) {
-    // Ink path for web-vitals
-    const app = render(h(GloApp));
-    await app.waitUntilExit();
-  } else if (selected.type === "generate-gloop") {
-    const rl2 = createInterface({ input: process.stdin, output: process.stdout });
-    await generateGloopFile(rl2, projectRoot);
-    rl2.close();
-  } else {
-    // cli-timing path (legacy readline)
-    const rl2 = createInterface({ input: process.stdin, output: process.stdout });
-    const { command, metric, sourcePaths, maxLoops, aiBackend } =
-      await collectCliInputs(rl2);
-    const backend = resolveBackendLegacy(rl2, aiBackend);
-    await runCliLoop({ rl: rl2, backend, command, metric, maxLoops, sourcePaths });
-    rl2.close();
-  }
-}
-
-main().catch((err) => {
+const app = render(h(GloApp));
+app.waitUntilExit().catch((err) => {
   console.error(`\n  Error: ${err.message}\n`);
   process.exit(1);
 });

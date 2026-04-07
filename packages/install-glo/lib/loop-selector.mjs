@@ -1,103 +1,162 @@
-import chalk from "chalk";
+import React, { useState } from "react";
+import { Box, Text } from "ink";
+import TextInput from "ink-text-input";
 import { parseGloopFile, BUILTIN_LOOPS } from "./gloop-config.mjs";
 
-const o = chalk.hex("#FF8C00");
-const g = chalk.hex("#4AF626");
-const d = chalk.dim;
-const w = chalk.white;
+const h = React.createElement;
+
+const o = { color: "#FF8C00" };
+const g = { color: "#4AF626" };
+const d = { dimColor: true };
+const w = { color: "white" };
 
 /**
- * Detect GLOOP.md and ask user to select a loop type.
- * Styled as a cassette track listing.
+ * Loop selector Ink component.
+ * Detects GLOOP.md, shows track listing, and calls onSelect with the chosen loop.
  */
-export async function selectLoop(rl, projectRoot, deps = {}) {
-  // Check for GLOOP.md first
-  const gloopConfig = parseGloopFile(projectRoot, deps);
+export function LoopSelector({ projectRoot, onSelect, deps }) {
+  const [gloopConfig] = useState(() => parseGloopFile(projectRoot, deps));
+  const [phase, setPhase] = useState(gloopConfig ? "gloop-ask" : "tracks");
+  const [input, setInput] = useState("");
 
-  if (gloopConfig) {
-    const name = gloopConfig.frontmatter.name || "Custom GLO Loop";
-    console.log(
-      g("  ▶ GLOOP.md detected") +
-        d(" — ") +
-        w(`"${name}"`)
-    );
-    console.log("");
-
-    const answer = await rl.question(
-      o("  Play this tape? ") +
-        d("[y = play / n = browse tracks]: ")
-    );
-
-    if (answer.trim().toLowerCase() === "y" || answer.trim() === "") {
-      return {
+  const handleGloopAnswer = (value) => {
+    const answer = value.trim().toLowerCase();
+    if (answer === "y" || answer === "") {
+      onSelect({
         type: gloopConfig.frontmatter.type || "custom",
         config: gloopConfig.frontmatter,
         body: gloopConfig.body,
         source: "gloop-file",
-      };
+      });
+    } else {
+      setInput("");
+      setPhase("tracks");
     }
-    console.log("");
+  };
+
+  const handleTrackChoice = (value) => {
+    const idx = parseInt(value.trim(), 10) - 1;
+    const selected = BUILTIN_LOOPS[idx] || BUILTIN_LOOPS[0];
+    onSelect({
+      type: selected.type,
+      config: {},
+      body: "",
+      source: "builtin",
+    });
+  };
+
+  const elems = [];
+
+  if (phase === "gloop-ask") {
+    const name = gloopConfig.frontmatter.name || "Custom GLO Loop";
+    elems.push(
+      h(
+        Text,
+        { key: "gloop-detect" },
+        h(Text, g, "  \u25b6 GLOOP.md detected"),
+        h(Text, d, " \u2014 "),
+        h(Text, w, `"${name}"`)
+      )
+    );
+    elems.push(h(Text, { key: "gloop-space" }, ""));
+    elems.push(
+      h(
+        Box,
+        { key: "gloop-prompt" },
+        h(Text, o, "  Play this tape? "),
+        h(Text, d, "[y = play / n = browse tracks]: "),
+        h(TextInput, { value: input, onChange: setInput, onSubmit: handleGloopAnswer })
+      )
+    );
+    return h(Box, { flexDirection: "column" }, ...elems);
   }
 
   // Track listing
-  console.log(
-    d("  ┌─ ") + o("TRACKS") + d(" ──────────────────────────────────────────────┐")
+  elems.push(
+    h(
+      Text,
+      { key: "tracks-header" },
+      h(Text, d, "  \u250c\u2500 "),
+      h(Text, o, "TRACKS"),
+      h(Text, d, " \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510")
+    )
   );
-  console.log(d("  │") + " ".repeat(53) + d("│"));
+  elems.push(
+    h(Text, { key: "tracks-gap1" }, h(Text, d, "  \u2502"), h(Text, null, " ".repeat(53)), h(Text, d, "\u2502"))
+  );
 
   for (let i = 0; i < BUILTIN_LOOPS.length; i++) {
     const loop = BUILTIN_LOOPS[i];
     const trackNum = `A${i + 1}`;
-    console.log(
-      d("  │") +
-        g(`   ${trackNum} ▸ `) +
-        w(loop.name) +
-        " ".repeat(Math.max(1, 44 - loop.name.length - trackNum.length)) +
-        d("│")
+    elems.push(
+      h(
+        Text,
+        { key: `track-${i}` },
+        h(Text, d, "  \u2502"),
+        h(Text, g, `   ${trackNum} \u25b8 `),
+        h(Text, w, loop.name),
+        h(Text, null, " ".repeat(Math.max(1, 44 - loop.name.length - trackNum.length))),
+        h(Text, d, "\u2502")
+      )
     );
-    console.log(
-      d("  │") +
-        d(`        ${loop.description}`) +
-        " ".repeat(Math.max(1, 46 - loop.description.length)) +
-        d("│")
+    elems.push(
+      h(
+        Text,
+        { key: `track-desc-${i}` },
+        h(Text, d, "  \u2502"),
+        h(Text, d, `        ${loop.description}`),
+        h(Text, null, " ".repeat(Math.max(1, 46 - loop.description.length))),
+        h(Text, d, "\u2502")
+      )
     );
-    console.log(d("  │") + " ".repeat(53) + d("│"));
+    elems.push(
+      h(Text, { key: `track-gap-${i}` }, h(Text, d, "  \u2502"), h(Text, null, " ".repeat(53)), h(Text, d, "\u2502"))
+    );
   }
 
-  console.log(
-    d("  │") +
-      d("   ··· more tracks coming soon") +
-      " ".repeat(23) +
-      d("│")
+  elems.push(
+    h(
+      Text,
+      { key: "tracks-more" },
+      h(Text, d, "  \u2502"),
+      h(Text, d, "   \u00b7\u00b7\u00b7 more tracks coming soon"),
+      h(Text, null, " ".repeat(23)),
+      h(Text, d, "\u2502")
+    )
   );
-  console.log(d("  │") + " ".repeat(53) + d("│"));
-  console.log(
-    d("  │") +
-      d("   ") + g("+") + d(" Drop a ") + w("GLOOP.md") + d(" in your repo to add your own") +
-      " ".repeat(6) +
-      d("│")
+  elems.push(
+    h(Text, { key: "tracks-gap2" }, h(Text, d, "  \u2502"), h(Text, null, " ".repeat(53)), h(Text, d, "\u2502"))
   );
-  console.log(d("  │") + " ".repeat(53) + d("│"));
-  console.log(
-    d("  └───────────────────────────────────────────────────────┘")
+  elems.push(
+    h(
+      Text,
+      { key: "tracks-gloop-hint" },
+      h(Text, d, "  \u2502"),
+      h(Text, d, "   "),
+      h(Text, g, "+"),
+      h(Text, d, " Drop a "),
+      h(Text, w, "GLOOP.md"),
+      h(Text, d, " in your repo to add your own"),
+      h(Text, null, " ".repeat(6)),
+      h(Text, d, "\u2502")
+    )
   );
-  console.log("");
+  elems.push(
+    h(Text, { key: "tracks-gap3" }, h(Text, d, "  \u2502"), h(Text, null, " ".repeat(53)), h(Text, d, "\u2502"))
+  );
+  elems.push(
+    h(Text, { key: "tracks-footer" }, h(Text, d, "  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518"))
+  );
+  elems.push(h(Text, { key: "tracks-space" }, ""));
+  elems.push(
+    h(
+      Box,
+      { key: "track-prompt" },
+      h(Text, o, "  Select track "),
+      h(Text, d, `(1-${BUILTIN_LOOPS.length}, default: 1): `),
+      h(TextInput, { value: input, onChange: setInput, onSubmit: handleTrackChoice })
+    )
+  );
 
-  const choice = await rl.question(
-    o("  Select track ") +
-      d(`(1-${BUILTIN_LOOPS.length}, default: 1): `)
-  );
-  const idx = parseInt(choice.trim(), 10) - 1;
-  const selected = BUILTIN_LOOPS[idx] || BUILTIN_LOOPS[0];
-
-  console.log(
-    g(`\n  ▶ Now playing: `) + w(selected.name) + "\n"
-  );
-
-  return {
-    type: selected.type,
-    config: {},
-    body: "",
-    source: "builtin",
-  };
+  return h(Box, { flexDirection: "column" }, ...elems);
 }

@@ -1,5 +1,4 @@
 import { streamText as defaultStreamText } from "ai";
-import chalk from "chalk";
 import { runWithCLI as defaultRunWithCLI } from "./ai-backend.mjs";
 
 function buildCliPrompt(command, metrics, sourceFiles, loopNumber, previousSuggestions, metric) {
@@ -65,7 +64,7 @@ export async function analyzeCliWithAI(
   loopNumber,
   previousSuggestions,
   metric = "execution_time",
-  { streamText = defaultStreamText, runWithCLI = defaultRunWithCLI } = {}
+  { streamText = defaultStreamText, runWithCLI = defaultRunWithCLI, onChunk } = {}
 ) {
   const prompt = buildCliPrompt(
     command,
@@ -77,16 +76,15 @@ export async function analyzeCliWithAI(
   );
 
   if (backend.type === "cli") {
-    return runWithCLI(backend.command, prompt);
+    return runWithCLI(backend.command, prompt, { onChunk });
   }
 
   const result = streamText({ model: backend.model, prompt });
   let text = "";
   for await (const chunk of result.textStream) {
-    process.stdout.write(chalk.dim(chunk));
+    if (onChunk) onChunk(chunk);
     text += chunk;
   }
-  process.stdout.write("\n");
   return text;
 }
 
